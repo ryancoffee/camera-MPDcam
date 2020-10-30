@@ -693,6 +693,39 @@ int main(int argc, char *argv[])
 		SPC3_Set_Live_Mode_OFF(spc3);						
 		break;
 		}
+	case 'e'://Rewrite this for no-source subtraction.  
+		//SPC3 constructor and parameter setting
+		out=(int)SPC3_Constr(&spc3, Normal,"");
+		SPC3_Set_Camera_Par(spc3, 4096, 1000,100,1,Disabled,Disabled,Disabled);
+		SPC3_Apply_settings(spc3);
+		//acquire background image
+		printf("\n\n\nClose the camera shutter and press ENTER...\n");
+		getchar();
+		SPC3_Prepare_Snap(spc3);
+		SPC3_Get_Snap(spc3);
+        SPC3_Save_Img_Disk(spc3, 1, 1, "Bg", TIFF_NO_COMPRESSION);
+		SPC3_Average_Img(spc3, data,1);
+		for(i=0;i<2048;i++)
+			if(data[i]<= 65535)
+				Img[i] = (UInt16) floor(data[i]+0.5);
+			else
+				Img[i] = 65535; // Avoid overflow
+		SPC3_Set_Background_Img(spc3, Img);
+		//acquire image with background subtration off
+		printf("Open the camera shutter and press ENTER ...\n");
+		getchar();
+		SPC3_Set_Background_Subtraction(spc3, Disabled);
+		SPC3_Apply_settings(spc3);
+		SPC3_Prepare_Snap(spc3);
+		SPC3_Get_Snap(spc3);
+        SPC3_Save_Img_Disk(spc3, 1, 1, "Normal", TIFF_NO_COMPRESSION);
+		//acquire image with background subtration on
+		SPC3_Set_Background_Subtraction(spc3, Enabled);
+		SPC3_Prepare_Snap(spc3);
+		SPC3_Get_Snap(spc3);
+        SPC3_Save_Img_Disk(spc3, 1, 1, "BgSubt", TIFF_NO_COMPRESSION);
+		break;
+
 
 
 	default:
