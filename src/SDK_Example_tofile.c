@@ -40,6 +40,25 @@ information.
 #include <string.h>
 #include <iostream>
 #include <fstream>
+#include <vector>
+
+#include <stdint.h>
+static inline uint32_t log2(const uint32_t x) {
+  uint32_t y;
+  asm ( "\tbsr %1, %0\n"
+      : "=r"(y)
+      : "r" (x)
+  );
+  return y;
+}
+static inline uint64_t log2(const uint64_t x) {
+  uint64_t y;
+  asm ( "\tbsr %1, %0\n"
+      : "=r"(y)
+      : "r" (x)
+  );
+  return y;
+}
 
 #if defined(__linux__)
     #define SLEEP usleep
@@ -131,7 +150,8 @@ int main(int argc, char *argv[])
 					 "Calculate the correlation image", //a
 					"Continuous acquisition on file", //b
 					"Continuous acquisition in memory", //c
-					"Live mode: write 10 images to file argv[1]" //w
+					"Live mode: main <argv[1] is filehead> <argv[2] is nimages>", //d
+					"future place for hardware subtract version: main <argv[1] is filehead> <argv[2] is nimages>" //e
 					};
 	Imgd =(double*) calloc(1, 2048* sizeof(double));
 	Img =(UInt16*) calloc(1, 2048* sizeof(UInt16));
@@ -147,7 +167,7 @@ int main(int argc, char *argv[])
 	printf("*******************************************************\n");
 	printf("SPC3 Test program\n");
 	printf("*******************************************************\n\n\n\n");
-	for (i = 0; i<14; i++)
+	for (i = 0; i<15; i++)
 		printf("\t%x) %s\n",i, Test[i]);
 	printf("\tq) Quit\n");
 	do 
@@ -666,34 +686,71 @@ int main(int argc, char *argv[])
 			std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nimages> =======\n" << std::endl;
 			break;
 		} else {
-		SPC3_Constr(&spc3, Normal,"");
-		SPC3_Set_Camera_Par(spc3, 100, 30000,300,1,Disabled,Disabled,Disabled);		
+		//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
+		//SPC3_Set_Camera_Par(spc3, 100, 30000,300,1,Disabled,Disabled,Disabled);		
+		/*
+		 *
+		 * OK change this to use the SPC3_Get_Memory_Buffer() method with the 
+		 * SPC3_Start_ContAcq_in_Memory() method for filling a buffer.
+		 *
+		 */
+		SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
+		//SPC3_Set_Camera_Par(handle , exposure (10ns units), nframes for snap, nintegration , ncounters, Force 8bit, half array, signed (needs 3 counters));		
+		const uint8_t exposure(10);// this is in units of 10 ns exposure
+		SPC3_Set_Camera_Par(spc3, exposure, 1,1,1,Enabled,Disabled,Disabled);		
 		SPC3_Set_Trigger_Out_State(spc3,Frame);
 		SPC3_Apply_settings(spc3); 
 		SPC3_Set_Live_Mode_ON(spc3);
 		//Acquistion of 10 live images
+		char fname[50];
 		std::ofstream outstream;
-		for(i=0;i<std::atoi(argv[2]);i++)
+		std::vector<uint64_t> hist(256,0);
+		size_t nimages = std::atoi(argv[2]);
+		size_t fnum = 0;
+		for(i=0;i<nimages;i++)
 		{
-			char fname[50];
-			sprintf(fname,"%s.%03d",argv[1],i);
-			outstream.open(fname,std::ios::out);
-			printf("Image %d:\n",i);
 			SPC3_Get_Live_Img(spc3, Img);
-			for(j=0;j<32;j++)
-			{
-				for(k=0;k<32;k++)
-					outstream << Img[32*j+k] << "\t";
+			for (int n=0;n<2048;n++){
+				if (Img[n]>0)
+					hist[ Img[n] ]++;
+			}
+			if (i%5000==0){
+				std::ofstream hstream;
+				sprintf(fname,"%s.hist",argv[1]);
+				hstream.open(fname,std::ios::out);
+				hstream << "#\tvalue hist (logarithm base 2) from \t" << i << "\tframes\n";
+				for (size_t i=0;i<hist.size();i++)
+					hstream << i << "\t" << log2((uint64_t)hist[i]) << "\n";
+				hstream << std::endl;
+				hstream.close();
+			}
+			if (i%1000==0){
+				sprintf(fname,"%s.%04d",argv[1],fnum++);
+				outstream.open(fname,std::ios::out);
+				printf("Image %d:\n",fnum);
+				for(j=0;j<64;j++)
+				{
+					for(k=0;k<32;k++)
+						outstream << Img[32*j+k] << "\t";
+					outstream << "\n";
+				}		
 				outstream << "\n";
-			}		
-			outstream << "\n";
-			outstream.close();
+				outstream.close();
+			}
 		}
 		//Live mode off
 		SPC3_Set_Live_Mode_OFF(spc3);						
+		std::ofstream histstream;
+		sprintf(fname,"%s.hist",argv[1]);
+		histstream.open(fname,std::ios::out);
+		histstream << "#\tvalue hist (logarithm base 2) from \t" << nimages << "\tframes\n";
+		for (size_t i=0;i<hist.size();i++)
+			histstream << i << "\t" << log2((uint32_t)hist[i]) << "\n";
+		histstream << std::endl;
+		histstream.close();
 		break;
 		}
-	case 'e'://Rewrite this for no-source subtraction.  
+	case 'e'://Rewrite this for no-source subtraction and then make a histogram of the result
 		//SPC3 constructor and parameter setting
 		out=(int)SPC3_Constr(&spc3, Normal,"");
 		SPC3_Set_Camera_Par(spc3, 4096, 1000,100,1,Disabled,Disabled,Disabled);
