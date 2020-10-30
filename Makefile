@@ -4,9 +4,9 @@ SRCDIR=./src/
 OUTDIR=./bin/64
 LIBDIR=/MPDcam/spc3/Linux/lib/64/
 CFLAGS=-Wall -pedantic -I./include -m64
-EXECUTABLE=SDK_Example_tofile
-SOURCETEST=SDK_Example_tofile.c
-OBJECT=SDK_Example_tofile.o
+EXECUTABLE=mpdHist_tofile
+SOURCETEST=mpdHist_tofile.c
+OBJECT=mpdHist_tofile.o
 
 all:$(SOURCETEST) $(EXECUTABLE) 
 	
