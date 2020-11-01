@@ -81,6 +81,7 @@ int main(int argc, char *argv[])
 
 	uint8_t exposure(20);// this is in units of 10 ns exposure
 
+	size_t nimages = 16;
 	char header[1024]="";
 	int integFrames=1;
 	double read_bytes=0,total_bytes=0;
@@ -673,7 +674,7 @@ int main(int argc, char *argv[])
 		std::ofstream outstream;
 		std::vector<uint16_t> hist16(256,0);
 		std::vector<uint16_t> hist16_rollover(256,0);
-		size_t nimages = std::atoi(argv[2]);
+		nimages = std::atoi(argv[2]);
 		size_t fnum = 0;
 		for(i=0;i<nimages;i++)
 		{
@@ -739,42 +740,45 @@ int main(int argc, char *argv[])
 std::cerr << "\n\n\t\tHERE I AM\n\n" << std::flush;
 		SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
 		exposure = 16;
-		SPC3_Set_Camera_Par(spc3, exposure, 1024,1,1,Enabled,Disabled,Disabled);		
+		nimages = std::atoi(argv[2]);
+		SPC3_Set_Camera_Par(spc3, exposure, nimages,1,1,Enabled,Disabled,Disabled);		
 
-		for (size_t i=0;i<2048;i++){
-			bgImg[i] = 1;
-		}
-		SPC3_Set_Background_Img(spc3, bgImg );
-		SPC3_Set_Background_Subtraction ( spc3, Enabled);
+//		for (size_t i=0;i<2048;i++){
+//			bgImg[i] = 1;
+//		}
+//		SPC3_Set_Background_Img(spc3, bgImg );
+//		SPC3_Set_Background_Subtraction ( spc3, Enabled);
 		SPC3_Set_Trigger_Out_State(spc3,Frame);
 		SPC3_Set_Live_Mode_OFF(spc3);
 		SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
-		SPC3_Prepare_Snap ( spc3 );
 		SPC3_Apply_settings(spc3); 
 		size_t nbatches = 10;
 
 		BUFFER_H buff = NULL;
 		printf("Press ENTER to start continuous acquisition...\n");
-                getchar();
-                getchar();
-                SPC3_Start_ContAcq_in_Memory(spc3);
-                for (size_t i = 0; i<5; i++)
-                {
-                        if (SPC3_Get_Memory_Buffer(spc3, &read_bytes, &buff) == OK)
-                        {
-				total_bytes = total_bytes + read_bytes;
-				for (size_t idx=0;idx<read_bytes;i++){
-					if (buff[idx]>0)
-						std::cerr << buff[idx] << std::endl;
-						hist256[buff[idx]]++;
+		getchar();
+		const UInt16 counter(0);
+		for (size_t b = 0; b<nbatches; b++)
+		{
+			std::cerr << "Working batch " << b << std::endl;
+			SPC3_Prepare_Snap(spc3);
+			SPC3_Get_Snap(spc3);
+			std::cerr << "OK, got captured snap for batch: " << b << "\n" << std::flush;
+			for (size_t f=1;f<nimages-1;f++)
+			{
+				std::cerr << "OK, got image " << f << " in batch: " << b << "\n" << std::flush;
+				if (SPC3_Get_Img_Position ( spc3, Img, f, counter) == OK){
+					for (size_t idx=0;idx<10;i++){
+						if (Img[idx]>0)
+							hist256[Img[idx]]++;
+					}
+					for (size_t hind=0; hind<20;hind++){
+						std::cerr << hist256[hind] << "\t";
+					}
+					std::cerr << "\n";
 				}
-				printf("Acquired %f bytes in %d readout operation\n", total_bytes, i);
-				usleep(10);
 			}
-			else
-				break;
 		}
-		SPC3_Stop_ContAcq_in_Memory(spc3);
 
 		for (size_t i = 0; i<10; i++){
 			std::cout << hist256[i] << "\n";
