@@ -740,8 +740,8 @@ int main(int argc, char *argv[])
 std::cerr << "\n\n\t\tHERE I AM\n\n" << std::flush;
 		SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
 		exposure = 16;
-		nimages = std::atoi(argv[2]);
-		SPC3_Set_Camera_Par(spc3, exposure, nimages,1,1,Enabled,Disabled,Disabled);		
+		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
+		SPC3_Set_Camera_Par(spc3, exposure, getnimages,1,1,Enabled,Disabled,Disabled);		
 
 //		for (size_t i=0;i<2048;i++){
 //			bgImg[i] = 1;
@@ -752,7 +752,7 @@ std::cerr << "\n\n\t\tHERE I AM\n\n" << std::flush;
 		SPC3_Set_Live_Mode_OFF(spc3);
 		SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
 		SPC3_Apply_settings(spc3); 
-		size_t nbatches = 10;
+		size_t nbatches = std::atoi(argv[2]);
 
 		BUFFER_H buff = NULL;
 		printf("Press ENTER to start continuous acquisition...\n");
@@ -763,20 +763,23 @@ std::cerr << "\n\n\t\tHERE I AM\n\n" << std::flush;
 			std::cerr << "Working batch " << b << std::endl;
 			SPC3_Prepare_Snap(spc3);
 			SPC3_Get_Snap(spc3);
+			SPC3_Get_Image_Buffer ( spc3, &buff );
+/*
+Get the pointer to the image buffer in which snap acquisition is stored.
+The first byte indicates if data is 8 or 16 bit. WARNING User must pay attention not to exceed the dimension of the
+buffer (2 ∗ 1024 ∗ 65534 + 1 bytes) when accessing it.
+*/
 			std::cerr << "OK, got captured snap for batch: " << b << "\n" << std::flush;
-			for (size_t f=1;f<nimages-1;f++)
-			{
-				std::cerr << "OK, got image " << f << " in batch: " << b << "\n" << std::flush;
-				if (SPC3_Get_Img_Position ( spc3, Img, f, counter) == OK){
-					for (size_t idx=0;idx<10;i++){
-						if (Img[idx]>0)
-							hist256[Img[idx]]++;
-					}
-					for (size_t hind=0; hind<20;hind++){
-						std::cerr << hist256[hind] << "\t";
-					}
-					std::cerr << "\n";
-				}
+			unsigned bytesPpix = unsigned(*(buff))/8;
+			if (b == 0 && bytesPpix > 1){ // only check on the first pass
+				getnimages /= 2;
+				getnimages -= 2;
+			}
+			std::cerr << "bytes per pixel = " << bytesPpix << "\twas the resoponse of int(*(buff))\n" << std::flush;
+			for (size_t o=0;o<2048*getnimages;o++){
+				uint8_t v = uint8_t(*(buff+(o+1)*bytesPpix));
+				if (v>0)
+					hist256[v]++;
 			}
 		}
 
@@ -784,6 +787,19 @@ std::cerr << "\n\n\t\tHERE I AM\n\n" << std::flush;
 			std::cout << hist256[i] << "\n";
 		}
 		std::cout << std::endl;
+		std::cerr << "\n\n\t\tDEBUG seg fault and also check for overflow in hist256";
+
+		std::ofstream histstream;
+		sprintf(fname,"%s.hist",argv[1]);
+		histstream.open(fname,std::ios::out);
+		histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages) << "\tframes\n";
+		for (size_t i=0;i<hist256.size();i++)
+			std::cout << i << "\t" << hist256[i] << "\t" << log2(hist256[i]) << "\n";
+			histstream << i << "\t" << hist256[i] << "\t" << log2(hist256[i]) << "\n";
+		std::cout << std::flush;
+		histstream << std::endl;
+		histstream.close();
+
 
 		break;
 
