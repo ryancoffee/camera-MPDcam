@@ -49,16 +49,54 @@ information.
 #include <stdint.h>
 
 #if defined(__linux__)
-    #define SLEEP usleep
-    #define MILLIS 1000
+#define SLEEP usleep
+#define MILLIS 1000
+#include <time.h>
+#include <sys/time.h>
+double get_wall_time(){
+	struct timeval time;
+	if (gettimeofday(&time,NULL)){
+		//  Handle error
+		return 0;
+	}
+	return (double)time.tv_sec + (double)time.tv_usec * .000001;
+}
+double get_cpu_time(){
+	return (double)clock() / CLOCKS_PER_SEC;
+}
 #elif defined(__APPLE__)
-    #define SLEEP usleep
-    #define MILLIS 1000
-    #include <unistd.h>
+#define SLEEP usleep
+#define MILLIS 1000
+#include <unistd.h>
 #elif defined(_WIN32)
-    #include <Windows.h>
-    #define SLEEP Sleep
-    #define MILLIS 1
+#include <Windows.h>
+#define SLEEP Sleep
+#define MILLIS 1
+double get_wall_time(){
+	LARGE_INTEGER time,freq;
+	if (!QueryPerformanceFrequency(&freq)){
+		//  Handle error
+		return 0;
+	}
+	if (!QueryPerformanceCounter(&time)){
+		//  Handle error
+		return 0;
+	}
+	return (double)time.QuadPart / freq.QuadPart;
+}
+double get_cpu_time(){
+	FILETIME a,b,c,d;
+	if (GetProcessTimes(GetCurrentProcess(),&a,&b,&c,&d) != 0){
+		//  Returns total user time.
+		//  Can be tweaked to include kernel times as well.
+		return
+			(double)(d.dwLowDateTime |
+					((unsigned long long)d.dwHighDateTime << 32)) * 0.0000001;
+	}else{
+		//  Handle error
+		return 0;
+	}
+}
 #endif
 
 //***********************************//
@@ -80,6 +118,8 @@ int main(int argc, char *argv[])
 	std::vector<uint64_t> hist256(256,0);
 
 	uint8_t exposure(20);// this is in units of 10 ns exposure
+	std::ofstream histstream;
+	std::ofstream imagestream;
 
 	size_t nimages = 16;
 	char header[1024]="";
@@ -649,6 +689,7 @@ int main(int argc, char *argv[])
 		*/
 	case 'd':
 		//SPC3 constructor and parameter setting
+		fname = (char*) calloc(256,sizeof(char));
 		if (argc < 3) {
 			std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nimages> =======\n" << std::endl;
 			break;
@@ -670,8 +711,6 @@ int main(int argc, char *argv[])
 		SPC3_Apply_settings(spc3); 
 		SPC3_Set_Live_Mode_ON(spc3);
 		//Acquistion of 10 live images
-		char fname[50];
-		std::ofstream outstream;
 		std::vector<uint16_t> hist16(256,0);
 		std::vector<uint16_t> hist16_rollover(256,0);
 		nimages = std::atoi(argv[2]);
@@ -700,21 +739,20 @@ int main(int argc, char *argv[])
 			}
 			if (i%1000==0){
 				sprintf(fname,"%s.%04d",argv[1],fnum++);
-				outstream.open(fname,std::ios::out);
+				imagestream.open(fname,std::ios::out);
 				printf("Image %d:\n",fnum);
 				for(j=0;j<64;j++)
 				{
 					for(k=0;k<32;k++)
-						outstream << Img[32*j+k] << "\t";
-					outstream << "\n";
+						imagestream << Img[32*j+k] << "\t";
+					imagestream << "\n";
 				}		
-				outstream << "\n";
-				outstream.close();
+				imagestream << "\n";
+				imagestream.close();
 			}
 		}
 		//Live mode off
 		SPC3_Set_Live_Mode_OFF(spc3);						
-		std::ofstream histstream;
 		sprintf(fname,"%s.hist",argv[1]);
 		histstream.open(fname,std::ios::out);
 		histstream << "#\tvalue\thist16\trollover " << UINT16_MAX+1 << "\t log2(hist16 + rollover*units)\n#\tfrom \t" << nimages << "\tframes\n";
@@ -722,10 +760,17 @@ int main(int argc, char *argv[])
 			histstream << i << "\t" << hist16[i] << "\t" << hist16_rollover[i] << "\t" << log2(hist16[i] + uint64_t(UINT16_MAX * hist16_rollover[i])) << "\n";
 		histstream << std::endl;
 		histstream.close();
+		free(fname);
 		break;
 		}
-	case 'e'://Rewrite this for using snap to capture 1000 images for histogram of the result
-               if (argc < 3) {
+	case 'e': 
+		/* this option forces 8 bit images and processes a nearly full buffer, 
+		 * if we were to do background subtract, then we would suffer 1/2 the number of frames
+		 * because of the fixed buffer size but promotion of images to 16bit when using 
+		 * background subtraction (though this technically only needs 9 bits to handle 
+		 * signed the result of a subtraction of 2 8 bit ints.
+		 */
+		if (argc < 3) {
                         std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nimages> =======\n" << std::endl;
                         break;
                 } else {
@@ -737,17 +782,37 @@ int main(int argc, char *argv[])
                  * SPC3_Start_ContAcq_in_Memory() method for filling a buffer.
                  *
                  */
-std::cerr << "\n\n\t\tHERE I AM\n\n" << std::flush;
+		fname = (char*) calloc(256,sizeof(char));
+		sprintf(fname,"%s.hist",argv[1]);
+		std::cout << "histogram fname = " << fname << std::endl;
+
+		std::vector<uint64_t> SumImg(2048,0); // initializing to 0 eventhough log2(1) = 0 so we won't distinguish single counts and no counts.
+
 		SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		exposure = 16;
+		exposure = 4;
 		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
+		getnimages /= 2;
 		SPC3_Set_Camera_Par(spc3, exposure, getnimages,1,1,Enabled,Disabled,Disabled);		
 
-//		for (size_t i=0;i<2048;i++){
-//			bgImg[i] = 1;
-//		}
-//		SPC3_Set_Background_Img(spc3, bgImg );
-//		SPC3_Set_Background_Subtraction ( spc3, Enabled);
+		std::vector<uint8_t> background(2048,1);
+
+		/*
+		 * Not doing this since instead we are fixing the images to 8 bit to handle more images per file transfer to memory
+		 * OK, actually, this might need to come back, but we should make it another option in order to fix the Img buffer processing to 1/2
+		 * Or even better, we can subtract right from here without need to use the on-camera, then we preserve the frame rate and all.
+		 */
+		for (size_t i=0;i<2048;i++){
+			background[i] = 0;
+			/*
+			 * replace this with a file read in from ascii is also good, since these are all 8 bit integers
+			 * The stored background should be a forced uint8_t but maybe you could do a positive and a negative image...
+			 * just in case the phase wrap is negative, then you still catch it in the negative image/hist.
+			 */
+		}
+
+		//		   SPC3_Set_Background_Img(spc3, bgImg );
+		//		   SPC3_Set_Background_Subtraction ( spc3, Enabled);
+
 		SPC3_Set_Trigger_Out_State(spc3,Frame);
 		SPC3_Set_Live_Mode_OFF(spc3);
 		SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
@@ -755,52 +820,81 @@ std::cerr << "\n\n\t\tHERE I AM\n\n" << std::flush;
 		size_t nbatches = std::atoi(argv[2]);
 
 		BUFFER_H buff = NULL;
-		printf("Press ENTER to start continuous acquisition...\n");
-		getchar();
 		const UInt16 counter(0);
+		// Start timers
+    		double wall0 = get_wall_time();
+		double cpu0  = get_cpu_time();
 		for (size_t b = 0; b<nbatches; b++)
 		{
-			std::cerr << "Working batch " << b << std::endl;
+			std::cout << "Working batch " << b << std::endl;
 			SPC3_Prepare_Snap(spc3);
 			SPC3_Get_Snap(spc3);
-			SPC3_Get_Image_Buffer ( spc3, &buff );
-/*
-Get the pointer to the image buffer in which snap acquisition is stored.
-The first byte indicates if data is 8 or 16 bit. WARNING User must pay attention not to exceed the dimension of the
-buffer (2 ∗ 1024 ∗ 65534 + 1 bytes) when accessing it.
-*/
-			std::cerr << "OK, got captured snap for batch: " << b << "\n" << std::flush;
-			unsigned bytesPpix = unsigned(*(buff))/8;
-			if (b == 0 && bytesPpix > 1){ // only check on the first pass
-				getnimages /= 2;
-				getnimages -= 2;
+			if (SPC3_Get_Image_Buffer ( spc3, &buff ) == OK)
+			{
+				/*
+				   Get the pointer to the image buffer in which snap acquisition is stored.
+				   The first byte indicates if data is 8 or 16 bit. WARNING User must pay attention not to exceed the dimension of the
+				   buffer (2 ∗ 1024 ∗ 65534 + 1 bytes) when accessing it.
+				   */
+				//std::cerr << "OK, got captured snap for batch: " << b << "\n" << std::flush;
+				unsigned bytesPpix = unsigned(*(buff))/8;
+				if (b == 0 && bytesPpix > 1){ // only check on the first pass
+					getnimages /= 2;
+					getnimages -= 4;
+				}
+				//std::cerr << "bytes per pixel = " << bytesPpix << "\twas the resoponse of int(*(buff))\n" << std::flush;
+				for (size_t o=0;o<2048*(getnimages-1);o++){
+					uint8_t v = uint8_t(*(buff+(o+1)*bytesPpix));
+					//if (v>0 && v<256){ // HERE HERE HERE HERE you can put the background subtraction based on e.g.
+					if (v>background[o%2048] && v<256+background[o%2048]) { 
+						v -= background[o%2048]; 
+						SumImg[o%2048] += v;
+						hist256[v]++;
+					}
+				}
 			}
-			std::cerr << "bytes per pixel = " << bytesPpix << "\twas the resoponse of int(*(buff))\n" << std::flush;
-			for (size_t o=0;o<2048*getnimages;o++){
-				uint8_t v = uint8_t(*(buff+(o+1)*bytesPpix));
-				if (v>0)
-					hist256[v]++;
-			}
+			histstream.open(fname,std::ios::out);
+			histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages) << "\tframes\n";
+			for (size_t j=0;j<hist256.size();j++)
+				histstream << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
+			histstream << std::endl;
+			histstream.close();
 		}
 
-		for (size_t i = 0; i<10; i++){
-			std::cout << hist256[i] << "\n";
-		}
-		std::cout << std::endl;
-		std::cerr << "\n\n\t\tDEBUG seg fault and also check for overflow in hist256";
+		//  Stop timers
+		double wall1 = get_wall_time();
+		double cpu1  = get_cpu_time();
+		double runtime = (wall1 - wall0);
+		double cputime = (cpu1 - cpu0);
 
-		std::ofstream histstream;
-		sprintf(fname,"%s.hist",argv[1]);
 		histstream.open(fname,std::ios::out);
 		histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages) << "\tframes\n";
-		for (size_t i=0;i<hist256.size();i++)
-			std::cout << i << "\t" << hist256[i] << "\t" << log2(hist256[i]) << "\n";
-			histstream << i << "\t" << hist256[i] << "\t" << log2(hist256[i]) << "\n";
-		std::cout << std::flush;
+		histstream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n" << cputime << " cpu time" << std::endl;
+		histstream << "#actual captured laser pulses is pulse spacing ~10ns * exposure (in units of 10 ns) " << runtime << "s for " << (nbatches * getnimages * exposure) << " pulses\n#\t" << cputime << " cpu time" << std::endl;
+		for (size_t j=0;j<hist256.size();j++){
+			histstream << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
+			if (j<8)
+				std::cout << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
+		}
 		histstream << std::endl;
 		histstream.close();
 
-
+// printing the log2() of the total integrated image
+		sprintf(fname,"%s.log2img",argv[1]);
+		std::cout << "log2() of integrated image fname = " << fname << std::endl;
+		std::cout << "image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\t" << (nbatches * getnimages * exposure) << " pulses\n" << std::endl;
+		imagestream.open(fname,std::ios::out);
+		imagestream << "#\ttotal integrated image, log2() representation from \t" << (nbatches * getnimages) << "\tframes\n";
+		imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n" << std::endl;
+		for(j=0;j<64;j++)
+		{
+			for(k=0;k<32;k++)
+				imagestream << log2(SumImg[32*j+k]) << "\t";
+			imagestream << "\n";
+		}		
+		imagestream << "\n";
+		imagestream.close();
+		free(fname);
 		break;
 
 		}
