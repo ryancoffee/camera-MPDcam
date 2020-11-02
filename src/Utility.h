@@ -9,6 +9,9 @@
 #define UTILS
 
 #include <stdint.h>
+#include <sstream>
+#include <fstream>
+#include <vector>
 
 // log2 methods from https://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c/994709
 // http://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html
@@ -110,4 +113,39 @@ void Hist(UInt16* Img, UInt16* hist)
 		hist[Img[i]]++;
 }
 
+//**************************************//
+//	Support functions		//
+//	From Ryan Coffee		//
+//**************************************//
+
+	template <typename T>
+std::istream& operator >> (std::istream & ins, std::vector<T> & record)
+{
+	record.clear();
+	std::string line;
+	getline( ins, line );
+	const char head='#';
+	if (line.find(head) != std::string::npos){
+		return ins;
+	}
+	std::istringstream iss( (std::string)line );
+	T value;
+	while (iss >> value){
+		record.push_back(value);
+	}
+	return ins;
+}
+
+	template <typename T>
+std::istream& operator >> (std::istream & ins, std::vector< std::vector<T> > & matrix)
+{
+	matrix.clear();
+	std::vector<T> record;
+	while (ins >> record)
+	{
+		if (record.size() > 0)
+			matrix.push_back( record );
+	}
+	return ins;
+}
 #endif

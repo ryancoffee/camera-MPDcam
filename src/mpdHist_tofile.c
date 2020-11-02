@@ -771,17 +771,37 @@ int main(int argc, char *argv[])
 		 * signed the result of a subtraction of 2 8 bit ints.
 		 */
 		if (argc < 3) {
-                        std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nimages> =======\n" << std::endl;
+                        std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nimages> <optional background img> =======\n" << std::endl;
                         break;
                 } else {
-                //SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-                //SPC3_Set_Camera_Par(spc3, 100, 30000,300,1,Disabled,Disabled,Disabled);               
-                /*
-                 *
-                 * OK change this to use the SPC3_Get_Memory_Buffer() method with the 
-                 * SPC3_Start_ContAcq_in_Memory() method for filling a buffer.
-                 *
-                 */
+		bool removeBGimg = false;
+		bgfname = (char*) calloc(256,sizeof(char));
+		std::vector< std::vector<uint8_t> > bgMat;
+		bgMat.reserve(2048);
+		std::vector<uint8_t> bgImg(2048,0); 
+		if (argc > 3) { 
+			removeBGimg = true; 
+			sprintf(bgfname,"%s",argv[3]);
+			std::cout << "Importing " << bgfname << " as background image" << std::endl;
+			std::ifstream bgfile(bgfname,std::ios::in);
+			if (!bgfile.is_open()){
+				std::cerr << "load BGimg failed " << std::endl;
+				removeBGimg = false;
+			}
+			bgMat.resize(64);
+			for (unsigned i=0;i<64;i++)
+				bgMat[i].resize(32);
+			bgfile >> bgMat;
+			bgfile.close();
+			std::cerr << "bgMat shape = ( " << bgMat.size() << " , " << bgMat[0].size() << " )" << std::endl;
+			for (unsigned i = 0;i<bgMat.size();i++){
+				for (unsigned j = 0;j<bgMat[i].size();j++){
+					bgImg[i*bgMat[i].size() + j] = bgMat[i][j];
+				}
+			}
+		}
+		
+
 		fname = (char*) calloc(256,sizeof(char));
 		sprintf(fname,"%s.hist",argv[1]);
 		std::cout << "histogram fname = " << fname << std::endl;
@@ -794,24 +814,18 @@ int main(int argc, char *argv[])
 		getnimages /= 2;
 		SPC3_Set_Camera_Par(spc3, exposure, getnimages,1,1,Enabled,Disabled,Disabled);		
 
-		std::vector<uint8_t> background(2048,1);
-
 		/*
-		 * Not doing this since instead we are fixing the images to 8 bit to handle more images per file transfer to memory
+		 * Not doing hardware background subtraction since instead we are fixing the images to 8 bit to handle more images per file transfer to memory
 		 * OK, actually, this might need to come back, but we should make it another option in order to fix the Img buffer processing to 1/2
 		 * Or even better, we can subtract right from here without need to use the on-camera, then we preserve the frame rate and all.
 		 */
-		for (size_t i=0;i<2048;i++){
-			background[i] = 0;
-			/*
-			 * replace this with a file read in from ascii is also good, since these are all 8 bit integers
-			 * The stored background should be a forced uint8_t but maybe you could do a positive and a negative image...
-			 * just in case the phase wrap is negative, then you still catch it in the negative image/hist.
-			 */
-		}
-
 		//		   SPC3_Set_Background_Img(spc3, bgImg );
 		//		   SPC3_Set_Background_Subtraction ( spc3, Enabled);
+		/*
+		 * file read in from ascii is also good, since these are all 8 bit integers
+		 * The stored background should be a forced uint8_t but maybe you could do a positive and a negative image...
+		 * just in case the phase wrap is negative, then you still catch it in the negative image/hist.
+		 */
 
 		SPC3_Set_Trigger_Out_State(spc3,Frame);
 		SPC3_Set_Live_Mode_OFF(spc3);
@@ -846,8 +860,8 @@ int main(int argc, char *argv[])
 				for (size_t o=0;o<2048*(getnimages-1);o++){
 					uint8_t v = uint8_t(*(buff+(o+1)*bytesPpix));
 					//if (v>0 && v<256){ // HERE HERE HERE HERE you can put the background subtraction based on e.g.
-					if (v>background[o%2048] && v<256+background[o%2048]) { 
-						v -= background[o%2048]; 
+					if (v>bgImg[o%2048] && v<256+bgImg[o%2048]) { 
+						v -= bgImg[o%2048]; 
 						SumImg[o%2048] += v;
 						hist256[v]++;
 					}
@@ -886,7 +900,7 @@ int main(int argc, char *argv[])
 		imagestream.open(fname,std::ios::out);
 		imagestream << "#\ttotal integrated image, log2() representation from \t" << (nbatches * getnimages) << "\tframes\n";
 		imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n" << std::endl;
-		for(j=0;j<64;j++)
+		for(size_t j=0;j<64;j++)
 		{
 			for(k=0;k<32;k++)
 				imagestream << log2(SumImg[32*j+k]) << "\t";
@@ -894,6 +908,20 @@ int main(int argc, char *argv[])
 		}		
 		imagestream << "\n";
 		imagestream.close();
+		if (!removeBGimg){
+			sprintf(fname,"%s.asbackground",argv[1]);
+			imagestream.open(fname,std::ios::out);
+			imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames of exposure = "<< exposure << "\n" << std::endl;
+			for(size_t j=0;j<64;j++)
+			{
+				for(k=0;k<32;k++)
+					imagestream << uint8_t(SumImg[32*j+k]/(nbatches * getnimages * exposure)) << "\t";
+				imagestream << "\n";
+			}		
+			imagestream << "\n";
+			imagestream.close();
+		}
+
 		free(fname);
 		break;
 
