@@ -148,4 +148,27 @@ std::istream& operator >> (std::istream & ins, std::vector< std::vector<T> > & m
 	}
 	return ins;
 }
+
+	template <typename T>
+std::ostream& operator << (std::ostream & outs, std::vector< T > & record)
+{
+	for (unsigned i=0;i<record.size();++i){
+		outs << record[i] << "\t";
+	}
+	outs << std::flush;
+	return outs;
+}
+
+	template <typename T>
+std::ostream& operator << (std::ostream & outs, std::vector< std::vector <T> > & matrix)
+{
+	for (unsigned i=0;i<matrix.size();++i){
+		for (unsigned j=0;j<matrix[i].size();++j){
+			outs << matrix[i][j] << "\t";
+		}
+		outs << "\n";
+	}
+	outs << std::flush;
+	return outs;
+}
 #endif

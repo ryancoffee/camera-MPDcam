@@ -132,7 +132,9 @@ int main(int argc, char *argv[])
 	double counts[3] = {0};
 	double *x = NULL,*y= NULL, *z = NULL, *Imgd=NULL;
 	double* data= NULL;
-	char c=0,*fname=NULL;
+	char c=0;
+	char *fname = NULL;
+	char *bgfname = NULL;
 	BUFFER_H buffer = NULL;
 	int counter = 0, aggressor=0;
 	SPC3Return error = OK;
@@ -809,7 +811,7 @@ int main(int argc, char *argv[])
 		std::vector<uint64_t> SumImg(2048,0); // initializing to 0 eventhough log2(1) = 0 so we won't distinguish single counts and no counts.
 
 		SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		exposure = 4;
+		exposure = 128;
 		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
 		getnimages /= 2;
 		SPC3_Set_Camera_Par(spc3, exposure, getnimages,1,1,Enabled,Disabled,Disabled);		
@@ -899,7 +901,7 @@ int main(int argc, char *argv[])
 		std::cout << "image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\t" << (nbatches * getnimages * exposure) << " pulses\n" << std::endl;
 		imagestream.open(fname,std::ios::out);
 		imagestream << "#\ttotal integrated image, log2() representation from \t" << (nbatches * getnimages) << "\tframes\n";
-		imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n" << std::endl;
+		imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n";
 		for(size_t j=0;j<64;j++)
 		{
 			for(k=0;k<32;k++)
@@ -908,14 +910,15 @@ int main(int argc, char *argv[])
 		}		
 		imagestream << "\n";
 		imagestream.close();
+
 		if (!removeBGimg){
 			sprintf(fname,"%s.asbackground",argv[1]);
 			imagestream.open(fname,std::ios::out);
-			imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames of exposure = "<< exposure << "\n" << std::endl;
+			imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames of exposure = "<< exposure << "s\n";
 			for(size_t j=0;j<64;j++)
 			{
-				for(k=0;k<32;k++)
-					imagestream << uint8_t(SumImg[32*j+k]/(nbatches * getnimages * exposure)) << "\t";
+				for(size_t k=0;k<32;k++)
+					imagestream << (SumImg[32*j+k]/(nbatches * getnimages * exposure)) << "\t";
 				imagestream << "\n";
 			}		
 			imagestream << "\n";
@@ -923,6 +926,7 @@ int main(int argc, char *argv[])
 		}
 
 		free(fname);
+		free(bgfname);
 		break;
 
 		}
