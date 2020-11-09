@@ -773,7 +773,7 @@ int main(int argc, char *argv[])
 		 * signed the result of a subtraction of 2 8 bit ints.
 		 */
 		if (argc < 3) {
-                        std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nimages> <optional background img> =======\n" << std::endl;
+                        std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nbatches> <optional background img> =======\n" << std::endl;
                         break;
                 } else {
 		bool removeBGimg = false;
@@ -811,10 +811,14 @@ int main(int argc, char *argv[])
 		std::vector<uint64_t> SumImg(2048,0); // initializing to 0 eventhough log2(1) = 0 so we won't distinguish single counts and no counts.
 
 		SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		exposure = 128;
+		exposure = 64;
 		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
-		getnimages /= 2;
-		SPC3_Set_Camera_Par(spc3, exposure, getnimages,1,1,Enabled,Disabled,Disabled);		
+		uint16_t nframeinteg = 1; // this seems to fail if I set this to 100
+		if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
+			free(bgfname);
+			free(fname);
+			break;
+		}		
 
 		/*
 		 * Not doing hardware background subtraction since instead we are fixing the images to 8 bit to handle more images per file transfer to memory
@@ -853,24 +857,23 @@ int main(int argc, char *argv[])
 				   buffer (2 ∗ 1024 ∗ 65534 + 1 bytes) when accessing it.
 				   */
 				//std::cerr << "OK, got captured snap for batch: " << b << "\n" << std::flush;
-				unsigned bytesPpix = unsigned(*(buff))/8;
+				unsigned bytesPpix = unsigned(*(buff))/8; // checking the first bit to see if vector is 8 bits or 16.
 				if (b == 0 && bytesPpix > 1){ // only check on the first pass
 					getnimages /= 2;
 					getnimages -= 4;
 				}
 				//std::cerr << "bytes per pixel = " << bytesPpix << "\twas the resoponse of int(*(buff))\n" << std::flush;
-				for (size_t o=0;o<2048*(getnimages-1);o++){
+				for (size_t o=0;o<2048*(getnimages/nframeinteg-1);o++){
 					uint8_t v = uint8_t(*(buff+(o+1)*bytesPpix));
 					//if (v>0 && v<256){ // HERE HERE HERE HERE you can put the background subtraction based on e.g.
-					if (v>bgImg[o%2048] && v<256+bgImg[o%2048]) { 
+					if (removeBGimg && v>bgImg[o%2048] && v<256+bgImg[o%2048])
 						v -= bgImg[o%2048]; 
-						SumImg[o%2048] += v;
-						hist256[v]++;
-					}
+					SumImg[o%2048] += v;
+					hist256[v]++;
 				}
 			}
 			histstream.open(fname,std::ios::out);
-			histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages) << "\tframes\n";
+			histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages * nframeinteg) << "\tframes\n";
 			for (size_t j=0;j<hist256.size();j++)
 				histstream << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
 			histstream << std::endl;
