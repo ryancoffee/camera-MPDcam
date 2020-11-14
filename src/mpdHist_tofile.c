@@ -219,7 +219,8 @@ int main(int argc, char *argv[])
 	case '0'://Test live mode
 		//SPC3 constructor and parameter setting
 		SPC3_Constr(&spc3, Normal,"");
-		SPC3_Set_Camera_Par(spc3, 100, 30000,300,1,Disabled,Disabled,Disabled);		
+		SPC3_Set_Camera_Par(spc3, 1, 1,1,1,Disabled,Disabled,Disabled);		
+		//SPC3_Set_Camera_Par(spc3, 100, 30000,300,1,Disabled,Disabled,Disabled);		
 		SPC3_Set_Trigger_Out_State(spc3,Frame);
 		SPC3_Apply_settings(spc3); 
 		SPC3_Set_Live_Mode_ON(spc3);
@@ -801,7 +802,18 @@ int main(int argc, char *argv[])
 					bgImg[i*bgMat[i].size() + j] = bgMat[i][j];
 				}
 			}
+			std::cerr << "bgImg = " << std::endl;
+			for (unsigned i = 0;i<2048;i++){
+				if (int(bgImg[i])>1)
+					std::cerr << bgImg[i];
+				else 
+					std::cerr << " ";
+				std::cerr << "\t";
+			}
+			std::cerr << "\n" << std::flush;
 		}
+
+		std::cerr << "removeBGimg = " << removeBGimg << "\t and false = " << (false) << std::endl;
 		
 
 		fname = (char*) calloc(256,sizeof(char));
@@ -811,7 +823,7 @@ int main(int argc, char *argv[])
 		std::vector<uint64_t> SumImg(2048,0); // initializing to 0 eventhough log2(1) = 0 so we won't distinguish single counts and no counts.
 
 		SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		exposure = 64;
+		exposure = 1;
 		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
 		uint16_t nframeinteg = 1; // this seems to fail if I set this to 100
 		if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
@@ -864,10 +876,21 @@ int main(int argc, char *argv[])
 				}
 				//std::cerr << "bytes per pixel = " << bytesPpix << "\twas the resoponse of int(*(buff))\n" << std::flush;
 				for (size_t o=0;o<2048*(getnimages/nframeinteg-1);o++){
-					uint8_t v = uint8_t(*(buff+(o+1)*bytesPpix));
-					//if (v>0 && v<256){ // HERE HERE HERE HERE you can put the background subtraction based on e.g.
-					if (removeBGimg && v>bgImg[o%2048] && v<256+bgImg[o%2048])
-						v -= bgImg[o%2048]; 
+					uint8_t v = (*(buff+(o+1)*bytesPpix));
+					if ((removeBGimg) and (bgImg[o%2048]>2)){
+						unsigned bg = bgImg[o%2048] ;
+						std::cerr << "bgImg[o%2048] =" << bg << "\tv = " << (int)v << std::endl;	
+						if (v>bg){
+							v -= bg; 
+						} else {
+							v = 0;
+						}
+					}
+					if ((b%10==0) and (o<2048)){
+						std::cout << (int)v << " ";
+						if (o%32 == 0)
+							std::cout << "\n";
+					}	
 					SumImg[o%2048] += v;
 					hist256[v]++;
 				}
@@ -878,6 +901,8 @@ int main(int argc, char *argv[])
 				histstream << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
 			histstream << std::endl;
 			histstream.close();
+			double wall = get_wall_time();
+			std::cout << "runtime at batch " << b << " = " << (wall - wall0) << std::endl;
 		}
 
 		//  Stop timers
@@ -888,7 +913,7 @@ int main(int argc, char *argv[])
 
 		histstream.open(fname,std::ios::out);
 		histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages) << "\tframes\n";
-		histstream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n" << cputime << " cpu time" << std::endl;
+		histstream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n#\t" << cputime << " cpu time" << std::endl;
 		histstream << "#actual captured laser pulses is pulse spacing ~10ns * exposure (in units of 10 ns) " << runtime << "s for " << (nbatches * getnimages * exposure) << " pulses\n#\t" << cputime << " cpu time" << std::endl;
 		for (size_t j=0;j<hist256.size();j++){
 			histstream << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
@@ -899,7 +924,8 @@ int main(int argc, char *argv[])
 		histstream.close();
 
 // printing the log2() of the total integrated image
-		sprintf(fname,"%s.log2img",argv[1]);
+		//sprintf(fname,"%s.log2img",argv[1]);
+		sprintf(fname,"%s.img",argv[1]);
 		std::cout << "log2() of integrated image fname = " << fname << std::endl;
 		std::cout << "image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\t" << (nbatches * getnimages * exposure) << " pulses\n" << std::endl;
 		imagestream.open(fname,std::ios::out);
@@ -907,8 +933,10 @@ int main(int argc, char *argv[])
 		imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n";
 		for(size_t j=0;j<64;j++)
 		{
-			for(k=0;k<32;k++)
-				imagestream << log2(SumImg[32*j+k]) << "\t";
+			for(k=0;k<32;k++){
+				imagestream << SumImg[32*j+k] << "\t";
+				//imagestream << log2(SumImg[32*j+k]) << "\t";
+			}
 			imagestream << "\n";
 		}		
 		imagestream << "\n";
@@ -921,7 +949,7 @@ int main(int argc, char *argv[])
 			for(size_t j=0;j<64;j++)
 			{
 				for(size_t k=0;k<32;k++)
-					imagestream << (SumImg[32*j+k]/(nbatches * getnimages * exposure)) << "\t";
+					imagestream << (SumImg[32*j+k]/(nbatches * getnimages)) << "\t";
 				imagestream << "\n";
 			}		
 			imagestream << "\n";
@@ -947,7 +975,9 @@ int main(int argc, char *argv[])
 		SPC3_Destr(spc3);
 	spc3 = NULL;
 	free(Img);
-	free(bgImg);
+	if(bgImg) 
+		free(bgImg);
+	bgImg = NULL;
 	free(Imgd);
 	free(data);
 	free(y);
