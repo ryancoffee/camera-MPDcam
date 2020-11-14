@@ -822,7 +822,7 @@ int main(int argc, char *argv[])
 
 		std::vector<uint64_t> SumImg(2048,0); // initializing to 0 eventhough log2(1) = 0 so we won't distinguish single counts and no counts.
 
-		SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
+		SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
 		exposure = 1;
 		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
 		uint16_t nframeinteg = 1; // this seems to fail if I set this to 100
@@ -876,17 +876,16 @@ int main(int argc, char *argv[])
 				}
 				//std::cerr << "bytes per pixel = " << bytesPpix << "\twas the resoponse of int(*(buff))\n" << std::flush;
 				for (size_t o=0;o<2048*(getnimages/nframeinteg-1);o++){
-					uint8_t v;
-					uint8_t bg;
-					v = (*(buff+(o+1)*bytesPpix));
-					if (removeBGimg){
-						bg = bgImg[o%2048];
-						if (bg<v){
+					uint8_t v = (*(buff+(o+1)*bytesPpix));
+					if ((removeBGimg) and (bgImg[o%2048]>2)){
+						unsigned bg = bgImg[o%2048] ;
+						std::cerr << "bgImg[o%2048] =" << bg << "\tv = " << (int)v << std::endl;	
+						if (v>bg){
 							v -= bg; 
 						} else {
 							v = 0;
 						}
-					} 
+					}
 					if ((b%10==0) and (o<2048)){
 						std::cout << (int)v << " ";
 						if (o%32 == 0)
