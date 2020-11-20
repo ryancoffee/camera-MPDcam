@@ -48,88 +48,16 @@ information.
 #include <stdint.h>
 
 #include "Utility.h"
+#include "mpdHist_tofile.h"
 
-#if defined(__linux__)
-#define SLEEP usleep
-#define MILLIS 1000
-#include <time.h>
-#include <sys/time.h>
-double get_wall_time(){
-	struct timeval time;
-	if (gettimeofday(&time,NULL)){
-		//  Handle error
-		return 0;
-	}
-	return (double)time.tv_sec + (double)time.tv_usec * .000001;
-}
-double get_cpu_time(){
-	return (double)clock() / CLOCKS_PER_SEC;
-}
-#elif defined(__APPLE__)
-#define SLEEP usleep
-#define MILLIS 1000
-#include <unistd.h>
-#elif defined(_WIN32)
-#include <Windows.h>
-#define SLEEP Sleep
-#define MILLIS 1
-double get_wall_time(){
-	LARGE_INTEGER time,freq;
-	if (!QueryPerformanceFrequency(&freq)){
-		//  Handle error
-		return 0;
-	}
-	if (!QueryPerformanceCounter(&time)){
-		//  Handle error
-		return 0;
-	}
-	return (double)time.QuadPart / freq.QuadPart;
-}
-double get_cpu_time(){
-	FILETIME a,b,c,d;
-	if (GetProcessTimes(GetCurrentProcess(),&a,&b,&c,&d) != 0){
-		//  Returns total user time.
-		//  Can be tweaked to include kernel times as well.
-		return
-			(double)(d.dwLowDateTime |
-					((unsigned long long)d.dwHighDateTime << 32)) * 0.0000001;
-	}else{
-		//  Handle error
-		return 0;
-	}
-}
-#endif
 
 //***********************************//
-//									 //
-//		Main code					 //
-//									 //
+//		          	     //
+//		Main code	     //
+//				     //
 //***********************************//
 
 
-
-void writeBinaryFile(std::vector<uint8_t> &Array, std::string fileName)
-{
-   std::fstream binaryIo;
-   binaryIo.open(fileName.c_str(), std::ios::out| std::ios::binary | std::ios::trunc);
-   binaryIo.seekp(0);
-   binaryIo.write((char*)(Array.size()), sizeof(Array.size()));
-   binaryIo.write((char*)(Array.data()), Array.size() * sizeof(Array[0]));
-   binaryIo.close();
-}
-
-std::vector<uint8_t>& readBinaryFile(std::string fileName,std::vector<uint8_t> &myArray)
-{
-    
-    std::fstream binaryIo;
-    binaryIo.open(fileName.c_str(), std::ios::in | std::ios::binary | std::ios::trunc);
-    size_t sz;
-    binaryIo.read((char*)&sz, sizeof(sz)); // read the number of elements 
-    myArray.resize(sz);
-    binaryIo.read((char*)(myArray.data()), myArray.size() * sizeof(myArray[0]));
-    binaryIo.close();
-    return myArray;
-}
 
 
 int main(int argc, char *argv[])
@@ -140,7 +68,6 @@ int main(int argc, char *argv[])
 	std::cout << "Remember, if writing ascii to file (options 'd,e'), give the filehead (and maybe nimages) in the command" << std::endl;
 	SPC3_H spc3= NULL;
 	UInt16* Img= NULL;
-	UInt16* bgImg= NULL;
 	UInt16 hist[65535];
 	UInt16 AppliedDT=0;
 	std::vector<uint64_t> hist256(256,0);
@@ -163,6 +90,7 @@ int main(int argc, char *argv[])
 	char c=0;
 	char *fname = NULL;
 	char *bgfname = NULL;
+	uint8_t * bgarray = NULL;
 	BUFFER_H buffer = NULL;
 	int counter = 0, aggressor=0;
 	SPC3Return error = OK;
@@ -292,7 +220,7 @@ int main(int argc, char *argv[])
 			SPC3_Prepare_Snap(spc3);
 			SPC3_Get_Snap(spc3);
 			SPC3_Average_Img(spc3,Imgd,1);
-			data[k] = Utility::mean_double(Imgd,2048);			
+			data[k] = SDK_utils::mean(Imgd,2048);			
 			printf("%d ns, Applied %d ns, %f\n", i, AppliedDT, data[k]);
 			fprintf(f,"%d %f\n",i,data[k]);
 			k++;
@@ -488,7 +416,7 @@ int main(int argc, char *argv[])
 				Img[k] = (UInt16) floor(data[k]+0.5);
 			else
 				Img[k] = 65535; // Avoid overflow
-			Utility::Hist(Img,hist);
+			SDK_utils::Hist(Img,hist);
 			for(j=0;j<65535;j++)
 				fprintf(f,"%hd ",hist[j]);
 			fprintf(f,"\n");
@@ -528,7 +456,7 @@ int main(int argc, char *argv[])
 		SPC3_Prepare_Snap(spc3);
 		SPC3_Get_Snap(spc3);		
 		SPC3_Average_Img(spc3, data,1);			
-		gateoff = Utility::mean_double(data,2048);						
+		gateoff = SDK_utils::mean(data,2048);						
 		printf("Gate OFF counts: %.2f\n",gateoff);
 		fprintf(f,"Gate OFF counts: %.2f\n",gateoff);
 		SPC3_Set_Gate_Mode(spc3, 1, Pulsed);
@@ -542,7 +470,7 @@ int main(int argc, char *argv[])
 			SPC3_Prepare_Snap(spc3);
 			SPC3_Get_Snap(spc3);		
 			SPC3_Average_Img(spc3, data,1);			
-			y[i] = Utility::mean_double(data,2048);		
+			y[i] = SDK_utils::mean(data,2048);		
 			y[i+101] = y[i]/gateoff*100; //actual gate width calculated from photon counts
 			x[i]=(double) i;						
 			printf("%3.0f\t\t%.2f\t\t%.2f\n",x[i],y[i],y[i+101]);
@@ -578,7 +506,7 @@ int main(int argc, char *argv[])
 		for (counter = 1; counter <= 3; counter++)
 		{
 			SPC3_Average_Img(spc3, data, counter);
-			gateoff_array[counter - 1] = Utility::mean_double(data, 2048);
+			gateoff_array[counter - 1] = SDK_utils::mean(data, 2048);
 			
 			printf("\nGate OFF counts on counter %d: %.2f\n", counter, gateoff_array[counter - 1]);
 			fprintf(f, "Gate OFF counts on counter %d: %.2f\n", counter, gateoff_array[counter - 1]);
@@ -595,7 +523,7 @@ int main(int argc, char *argv[])
 			for (counter = 1; counter <= 3; counter++)
 			{
 				SPC3_Average_Img(spc3, data, counter);
-				counts[counter - 1] = Utility::mean_double(data, 2048);
+				counts[counter - 1] = SDK_utils::mean(data, 2048);
 			}
 
 			printf("%d\t\t%.4f\t\t%.4f\t\t%.4f\n", j, counts[0] / gateoff_array[0] * 100, counts[2] / gateoff_array[2] * 100, counts[1] / gateoff_array[1] * 100);
@@ -804,204 +732,156 @@ int main(int argc, char *argv[])
 		if (argc < 3) {
                         std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nbatches> <optional background img> =======\n" << std::endl;
                         break;
-                } else {
-		bool removeBGimg = false;
-		bgfname = (char*) calloc(256,sizeof(char));
-		std::vector< std::vector<uint8_t> > bgMat;
-		bgMat.reserve(2048);
-		std::vector<uint8_t> bgarray;
-		bgarray.resize(2048);
-		std::vector<uint8_t> bgImg(2048,0); 
-		if (argc > 3) { 
-			removeBGimg = true; 
-			sprintf(bgfname,"%s",argv[3]);
-			bgarray = readBinaryFile(bgfname,bgarray);
-/*
-			std::cout << "Importing " << bgfname << " as background image" << std::endl;
-			std::ifstream bgfile(bgfname,std::ios::in);
-			if (!bgfile.is_open()){
-				std::cerr << "load BGimg failed " << std::endl;
-				removeBGimg = false;
-			}
-			bgMat.resize(64);
-			for (unsigned i=0;i<64;i++)
-				bgMat[i].resize(32);
-			bgfile >> bgMat;
-			bgfile.close();
-			std::cerr << "bgMat shape = ( " << bgMat.size() << " , " << bgMat[0].size() << " )" << std::endl;
-			for (unsigned i = 0;i<bgMat.size();i++){
-				for (unsigned j = 0;j<bgMat[i].size();j++){
-					bgImg[i*bgMat[i].size() + j] = bgMat[i][j];
+		} else {
+			size_t sz(2048);
+			bool removeBGimg = false;
+			bgfname = (char*) calloc(256,sizeof(char));
+			bgarray = (uint8_t*) calloc(2048,sizeof(uint8_t));
+			if (argc > 3) { 
+				removeBGimg = true; 
+				sprintf(bgfname,"%s",argv[3]);
+				Utility::readBinaryFile(bgfname,sz,bgarray);
+				std::cout << "bgarray = \n" << std::endl;
+				for (size_t m=0;m<sz;m++){
+					std::cout << (int)bgarray[m] << " ";
+					if ((m+1)%32 == 0)
+						std::cout << "\n";
 				}
+				std::cout << std::endl;
 			}
-			std::cerr << "bgImg = " << std::endl;
-			for (unsigned i = 0;i<2048;i++){
-				std::cerr << (uint8_t)bgImg[i] << " ";
-				if ((i+1) % 32 == 0)
-					std::cerr << "\n";
-			}
-*/
-			std::cout << "bgarray = \n" << std::endl;
-			for (size_t m=0;m<bgarray.size();m++){
-				std::cout << (int)bgarray[m] << " ";
-				if ((m+1)%32 == 0)
-					std::cout << "\n";
-			}
-			std::cout << std::endl;
-		}
 
-		std::cerr << "removeBGimg = " << removeBGimg << "\t and false = " << (false) << std::endl;
-		
+			std::cerr << "removeBGimg = " << removeBGimg << "\t and false = " << (false) << std::endl;
 
-		fname = (char*) calloc(256,sizeof(char));
-		sprintf(fname,"%s.hist",argv[1]);
-		std::cout << "histogram fname = " << fname << std::endl;
 
-		std::vector<uint64_t> SumImg(2048,0); // initializing to 0 eventhough log2(1) = 0 so we won't distinguish single counts and no counts.
+			fname = (char*) calloc(256,sizeof(char));
+			sprintf(fname,"%s.hist",argv[1]);
+			std::cout << "histogram fname = " << fname << std::endl;
 
-		SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
-		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
-		uint16_t nframeinteg = 1; // this seems to fail if I set this to 100
-		if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
-			free(bgfname);
-			free(fname);
-			break;
-		}		
+			std::vector<uint64_t> SumImg(2048,0); // initializing to 0 eventhough log2(1) = 0 so we won't distinguish single counts and no counts.
 
-		/*
-		 * Not doing hardware background subtraction since instead we are fixing the images to 8 bit to handle more images per file transfer to memory
-		 * OK, actually, this might need to come back, but we should make it another option in order to fix the Img buffer processing to 1/2
-		 * Or even better, we can subtract right from here without need to use the on-camera, then we preserve the frame rate and all.
-		 */
-		//		   SPC3_Set_Background_Img(spc3, bgImg );
-		//		   SPC3_Set_Background_Subtraction ( spc3, Enabled);
-		/*
-		 * file read in from ascii is also good, since these are all 8 bit integers
-		 * The stored background should be a forced uint8_t but maybe you could do a positive and a negative image...
-		 * just in case the phase wrap is negative, then you still catch it in the negative image/hist.
-		 */
+			SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
+			exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+			uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
+			uint16_t nframeinteg = 1; // this seems to fail if I set this to 100
+			if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
+				free(bgfname);
+				free(fname);
+				break;
+			}		
 
-		SPC3_Set_Trigger_Out_State(spc3,Frame);
-		SPC3_Set_Live_Mode_OFF(spc3);
-		SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
-		SPC3_Apply_settings(spc3); 
-		size_t nbatches = std::atoi(argv[2]);
+			SPC3_Set_Trigger_Out_State(spc3,Frame);
+			SPC3_Set_Live_Mode_OFF(spc3);
+			SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
+			SPC3_Apply_settings(spc3); 
+			size_t nbatches = std::atoi(argv[2]);
 
-		BUFFER_H buff = NULL;
-		const UInt16 counter(0);
-		// Start timers
-    		double wall0 = get_wall_time();
-		double cpu0  = get_cpu_time();
-		for (size_t b = 0; b<nbatches; b++)
-		{
-			std::cout << "Working batch " << b << std::endl;
-			SPC3_Prepare_Snap(spc3);
-			SPC3_Get_Snap(spc3);
-			if (SPC3_Get_Image_Buffer ( spc3, &buff ) == OK)
+			BUFFER_H buff = NULL;
+			const UInt16 counter(0);
+			// Start timers
+			double wall0 = get_wall_time<double>();
+			double cpu0  = get_cpu_time<double>();
+			for (size_t b = 0; b<nbatches; b++)
 			{
-				/*
-				   Get the pointer to the image buffer in which snap acquisition is stored.
-				   The first byte indicates if data is 8 or 16 bit. WARNING User must pay attention not to exceed the dimension of the
-				   buffer (2 ∗ 1024 ∗ 65534 + 1 bytes) when accessing it.
-				   */
-				//std::cerr << "OK, got captured snap for batch: " << b << "\n" << std::flush;
-				unsigned bytesPpix = unsigned(*(buff))/8; // checking the first bit to see if vector is 8 bits or 16.
-				if (b == 0 && bytesPpix > 1){ // only check on the first pass
-					getnimages /= 2;
-					getnimages -= 4;
+				std::cout << "Working batch " << b << std::endl;
+				SPC3_Prepare_Snap(spc3);
+				SPC3_Get_Snap(spc3);
+				if (SPC3_Get_Image_Buffer ( spc3, &buff ) == OK)
+				{
+					/*
+					   Get the pointer to the image buffer in which snap acquisition is stored.
+					   The first byte indicates if data is 8 or 16 bit. WARNING User must pay attention not to exceed the dimension of the
+					   buffer (2 ∗ 1024 ∗ 65534 + 1 bytes) when accessing it.
+					   */
+					//std::cerr << "OK, got captured snap for batch: " << b << "\n" << std::flush;
+					unsigned bytesPpix = unsigned(*(buff))/8; // checking the first bit to see if vector is 8 bits or 16.
+					if (b == 0 && bytesPpix > 1){ // only check on the first pass
+						getnimages /= 2;
+						getnimages -= 4;
+					}
+					//std::cerr << "bytes per pixel = " << bytesPpix << "\twas the resoponse of int(*(buff))\n" << std::flush;
+					for (size_t o=0;o<2048*(getnimages/nframeinteg-1);o++){
+						uint8_t v;
+						uint8_t bg;
+						v = (*(buff+1+o*bytesPpix));
+						//v = (*(buff+(o+1)*bytesPpix));
+						if (removeBGimg){
+							bg = bgarray[o%2048];
+							if (bg<v){
+								v -= bg; 
+							} else {
+								v = uint8_t(0);
+							}
+						} 
+						SumImg[o%2048] += v;
+						hist256[v]++;
+						if ((b%10==0) and (o<2048)){
+							std::cout << (int)v << " ";
+							if ((o+1)%32 == 0)
+								std::cout << "\n";
+						}	
+					}
 				}
-				//std::cerr << "bytes per pixel = " << bytesPpix << "\twas the resoponse of int(*(buff))\n" << std::flush;
-				for (size_t o=0;o<2048*(getnimages/nframeinteg-1);o++){
-					uint8_t v;
-					uint8_t bg;
-					v = (*(buff+1+o*bytesPpix));
-					//v = (*(buff+(o+1)*bytesPpix));
-					if (removeBGimg){
-						bg = bgarray[o%2048];
-						//bg = bgImg[o%2048];
-						if (bg<v){
-							v -= (int)bg; 
-						} else {
-							v = (int)0;
-						}
-					} 
-					SumImg[o%2048] += (int)v;
-					hist256[v]++;
-					if ((b%10==0) and (o<2048)){
-						std::cout << (int)v << " ";
-						if ((o+1)%32 == 0)
-							std::cout << "\n";
-					}	
-				}
+				histstream.open(fname,std::ios::out);
+				histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages * nframeinteg) << "\tframes\n";
+				for (size_t j=0;j<hist256.size();j++)
+					histstream << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
+				histstream << std::endl;
+				histstream.close();
+				double wall = get_wall_time();
+				std::cout << "runtime at batch " << b << " = " << (wall - wall0) << std::endl;
 			}
+
+			//  Stop timers
+			double wall1 = get_wall_time();
+			double cpu1  = get_cpu_time();
+			double runtime = (wall1 - wall0);
+			double cputime = (cpu1 - cpu0);
+
 			histstream.open(fname,std::ios::out);
-			histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages * nframeinteg) << "\tframes\n";
-			for (size_t j=0;j<hist256.size();j++)
+			histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages) << "\tframes\n";
+			histstream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n#\t" << cputime << " cpu time" << std::endl;
+			histstream << "#actual captured laser pulses is pulse spacing ~10ns * exposure (in units of 10 ns) " << runtime << "s for " << (nbatches * getnimages * exposure) << " pulses\n#\t" << cputime << " cpu time" << std::endl;
+			for (size_t j=0;j<hist256.size();j++){
 				histstream << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
+				if (j<8)
+					std::cout << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
+			}
 			histstream << std::endl;
 			histstream.close();
-			double wall = get_wall_time();
-			std::cout << "runtime at batch " << b << " = " << (wall - wall0) << std::endl;
-		}
 
-		//  Stop timers
-		double wall1 = get_wall_time();
-		double cpu1  = get_cpu_time();
-		double runtime = (wall1 - wall0);
-		double cputime = (cpu1 - cpu0);
-
-		histstream.open(fname,std::ios::out);
-		histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages) << "\tframes\n";
-		histstream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n#\t" << cputime << " cpu time" << std::endl;
-		histstream << "#actual captured laser pulses is pulse spacing ~10ns * exposure (in units of 10 ns) " << runtime << "s for " << (nbatches * getnimages * exposure) << " pulses\n#\t" << cputime << " cpu time" << std::endl;
-		for (size_t j=0;j<hist256.size();j++){
-			histstream << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
-			if (j<8)
-				std::cout << j << "\t" << hist256[j] << "\t" << log2(hist256[j]) << "\n";
-		}
-		histstream << std::endl;
-		histstream.close();
-
-// printing the log2() of the total integrated image
-		//sprintf(fname,"%s.log2img",argv[1]);
-		sprintf(fname,"%s.img",argv[1]);
-		std::cout << "log2() of integrated image fname = " << fname << std::endl;
-		std::cout << "image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\t" << (nbatches * getnimages * exposure) << " pulses\n" << std::endl;
-		imagestream.open(fname,std::ios::out);
-		imagestream << "#\ttotal integrated image, log2() representation from \t" << (nbatches * getnimages) << "\tframes\n";
-		imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n";
-		for(size_t j=0;j<64;j++)
-		{
-			for(k=0;k<32;k++){
-				imagestream << SumImg[32*j+k] << " ";
-				//imagestream << log2(SumImg[32*j+k]) << "\t";
-			}
-			imagestream << "\n";
-		}		
-		imagestream << "\n";
-		imagestream.close();
-
-		if (!removeBGimg){
-			sprintf(fname,"%s.asbackground",argv[1]);
-			writeBinaryFile(bgarray, fname);
-/*
+			// printing the log2() of the total integrated image
+			//sprintf(fname,"%s.log2img",argv[1]);
+			sprintf(fname,"%s.img",argv[1]);
+			std::cout << "log2() of integrated image fname = " << fname << std::endl;
+			std::cout << "image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\t" << (nbatches * getnimages * exposure) << " pulses\n" << std::endl;
 			imagestream.open(fname,std::ios::out);
-			//imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames of exposure = "<< exposure << "s\n";
+			imagestream << "#\ttotal integrated image, log2() representation from \t" << (nbatches * getnimages) << "\tframes\n";
+			imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n";
 			for(size_t j=0;j<64;j++)
 			{
-				for(size_t k=0;k<32;k++)
-					imagestream << (int)(SumImg[32*j+k]/(nbatches * getnimages)) << " ";
+				for(k=0;k<32;k++){
+					imagestream << SumImg[32*j+k] << " ";
+					//imagestream << log2(SumImg[32*j+k]) << "\t";
+				}
 				imagestream << "\n";
 			}		
 			imagestream << "\n";
 			imagestream.close();
-*/
-		}
 
-		free(fname);
-		free(bgfname);
-		break;
+			if (!removeBGimg){
+				for (size_t i=0;i<sz;i++){
+					bgarray[i] = (uint8_t)( (double)SumImg[i]/double(nbatches * getnimages) );
+					std::cerr << (int) bgarray[i] << " ";
+					if ((i+1)%32==0)
+						std::cerr << "\n";
+				}
+				sprintf(fname,"%s.asbackground",argv[1]);
+				Utility::writeBinaryFile(bgarray,sz, fname);
+			}
+
+			free(fname);
+			free(bgfname);
+			break;
 
 		}
 
@@ -1010,17 +890,17 @@ int main(int argc, char *argv[])
 		break;
 	}
 
-////////////////////////////////////
-// Destructors					  //
-////////////////////////////////////
+	////////////////////////////////////
+	// Destructors					  //
+	////////////////////////////////////
 
 	if(spc3)
 		SPC3_Destr(spc3);
 	spc3 = NULL;
 	free(Img);
-	if(bgImg) 
-		free(bgImg);
-	bgImg = NULL;
+	if (bgarray)
+		free(bgarray);
+	bgarray = NULL;
 	free(Imgd);
 	free(data);
 	free(y);
