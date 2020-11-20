@@ -45,8 +45,9 @@ information.
 #include <vector>
 #include <unistd.h>
 
-#include "Utility.h"
 #include <stdint.h>
+
+#include "Utility.h"
 
 #if defined(__linux__)
 #define SLEEP usleep
@@ -104,6 +105,33 @@ double get_cpu_time(){
 //		Main code					 //
 //									 //
 //***********************************//
+
+
+
+void writeBinaryFile(std::vector<uint8_t> &Array, std::string fileName)
+{
+   std::fstream binaryIo;
+   binaryIo.open(fileName.c_str(), std::ios::out| std::ios::binary | std::ios::trunc);
+   binaryIo.seekp(0);
+   binaryIo.write((char*)(Array.size()), sizeof(Array.size()));
+   binaryIo.write((char*)(Array.data()), Array.size() * sizeof(Array[0]));
+   binaryIo.close();
+}
+
+std::vector<uint8_t>& readBinaryFile(std::string fileName,std::vector<uint8_t> &myArray)
+{
+    
+    std::fstream binaryIo;
+    binaryIo.open(fileName.c_str(), std::ios::in | std::ios::binary | std::ios::trunc);
+    size_t sz;
+    binaryIo.read((char*)&sz, sizeof(sz)); // read the number of elements 
+    myArray.resize(sz);
+    binaryIo.read((char*)(myArray.data()), myArray.size() * sizeof(myArray[0]));
+    binaryIo.close();
+    return myArray;
+}
+
+
 int main(int argc, char *argv[])
 {
 //////////////////////////
@@ -264,7 +292,7 @@ int main(int argc, char *argv[])
 			SPC3_Prepare_Snap(spc3);
 			SPC3_Get_Snap(spc3);
 			SPC3_Average_Img(spc3,Imgd,1);
-			data[k]=mean_double(Imgd,2048);			
+			data[k] = Utility::mean_double(Imgd,2048);			
 			printf("%d ns, Applied %d ns, %f\n", i, AppliedDT, data[k]);
 			fprintf(f,"%d %f\n",i,data[k]);
 			k++;
@@ -460,7 +488,7 @@ int main(int argc, char *argv[])
 				Img[k] = (UInt16) floor(data[k]+0.5);
 			else
 				Img[k] = 65535; // Avoid overflow
-			Hist(Img,hist);
+			Utility::Hist(Img,hist);
 			for(j=0;j<65535;j++)
 				fprintf(f,"%hd ",hist[j]);
 			fprintf(f,"\n");
@@ -500,7 +528,7 @@ int main(int argc, char *argv[])
 		SPC3_Prepare_Snap(spc3);
 		SPC3_Get_Snap(spc3);		
 		SPC3_Average_Img(spc3, data,1);			
-		gateoff = mean_double(data,2048);						
+		gateoff = Utility::mean_double(data,2048);						
 		printf("Gate OFF counts: %.2f\n",gateoff);
 		fprintf(f,"Gate OFF counts: %.2f\n",gateoff);
 		SPC3_Set_Gate_Mode(spc3, 1, Pulsed);
@@ -514,7 +542,7 @@ int main(int argc, char *argv[])
 			SPC3_Prepare_Snap(spc3);
 			SPC3_Get_Snap(spc3);		
 			SPC3_Average_Img(spc3, data,1);			
-			y[i] = mean_double(data,2048);		
+			y[i] = Utility::mean_double(data,2048);		
 			y[i+101] = y[i]/gateoff*100; //actual gate width calculated from photon counts
 			x[i]=(double) i;						
 			printf("%3.0f\t\t%.2f\t\t%.2f\n",x[i],y[i],y[i+101]);
@@ -550,7 +578,7 @@ int main(int argc, char *argv[])
 		for (counter = 1; counter <= 3; counter++)
 		{
 			SPC3_Average_Img(spc3, data, counter);
-			gateoff_array[counter - 1] = mean_double(data, 2048);
+			gateoff_array[counter - 1] = Utility::mean_double(data, 2048);
 			
 			printf("\nGate OFF counts on counter %d: %.2f\n", counter, gateoff_array[counter - 1]);
 			fprintf(f, "Gate OFF counts on counter %d: %.2f\n", counter, gateoff_array[counter - 1]);
@@ -567,7 +595,7 @@ int main(int argc, char *argv[])
 			for (counter = 1; counter <= 3; counter++)
 			{
 				SPC3_Average_Img(spc3, data, counter);
-				counts[counter - 1] = mean_double(data, 2048);
+				counts[counter - 1] = Utility::mean_double(data, 2048);
 			}
 
 			printf("%d\t\t%.4f\t\t%.4f\t\t%.4f\n", j, counts[0] / gateoff_array[0] * 100, counts[2] / gateoff_array[2] * 100, counts[1] / gateoff_array[1] * 100);
@@ -781,10 +809,14 @@ int main(int argc, char *argv[])
 		bgfname = (char*) calloc(256,sizeof(char));
 		std::vector< std::vector<uint8_t> > bgMat;
 		bgMat.reserve(2048);
+		std::vector<uint8_t> bgarray;
+		bgarray.resize(2048);
 		std::vector<uint8_t> bgImg(2048,0); 
 		if (argc > 3) { 
 			removeBGimg = true; 
 			sprintf(bgfname,"%s",argv[3]);
+			bgarray = readBinaryFile(bgfname,bgarray);
+/*
 			std::cout << "Importing " << bgfname << " as background image" << std::endl;
 			std::ifstream bgfile(bgfname,std::ios::in);
 			if (!bgfile.is_open()){
@@ -804,13 +836,18 @@ int main(int argc, char *argv[])
 			}
 			std::cerr << "bgImg = " << std::endl;
 			for (unsigned i = 0;i<2048;i++){
-				if (int(bgImg[i])>1)
-					std::cerr << bgImg[i];
-				else 
-					std::cerr << " ";
-				std::cerr << "\t";
+				std::cerr << (uint8_t)bgImg[i] << " ";
+				if ((i+1) % 32 == 0)
+					std::cerr << "\n";
 			}
-			std::cerr << "\n" << std::flush;
+*/
+			std::cout << "bgarray = \n" << std::endl;
+			for (size_t m=0;m<bgarray.size();m++){
+				std::cout << (int)bgarray[m] << " ";
+				if ((m+1)%32 == 0)
+					std::cout << "\n";
+			}
+			std::cout << std::endl;
 		}
 
 		std::cerr << "removeBGimg = " << removeBGimg << "\t and false = " << (false) << std::endl;
@@ -823,7 +860,7 @@ int main(int argc, char *argv[])
 		std::vector<uint64_t> SumImg(2048,0); // initializing to 0 eventhough log2(1) = 0 so we won't distinguish single counts and no counts.
 
 		SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		exposure = 1;
+		exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
 		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
 		uint16_t nframeinteg = 1; // this seems to fail if I set this to 100
 		if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
@@ -878,22 +915,24 @@ int main(int argc, char *argv[])
 				for (size_t o=0;o<2048*(getnimages/nframeinteg-1);o++){
 					uint8_t v;
 					uint8_t bg;
-					v = (*(buff+(o+1)*bytesPpix));
+					v = (*(buff+1+o*bytesPpix));
+					//v = (*(buff+(o+1)*bytesPpix));
 					if (removeBGimg){
-						bg = bgImg[o%2048];
+						bg = bgarray[o%2048];
+						//bg = bgImg[o%2048];
 						if (bg<v){
-							v -= bg; 
+							v -= (int)bg; 
 						} else {
-							v = 0;
+							v = (int)0;
 						}
 					} 
+					SumImg[o%2048] += (int)v;
+					hist256[v]++;
 					if ((b%10==0) and (o<2048)){
 						std::cout << (int)v << " ";
-						if (o%32 == 0)
+						if ((o+1)%32 == 0)
 							std::cout << "\n";
 					}	
-					SumImg[o%2048] += v;
-					hist256[v]++;
 				}
 			}
 			histstream.open(fname,std::ios::out);
@@ -935,7 +974,7 @@ int main(int argc, char *argv[])
 		for(size_t j=0;j<64;j++)
 		{
 			for(k=0;k<32;k++){
-				imagestream << SumImg[32*j+k] << "\t";
+				imagestream << SumImg[32*j+k] << " ";
 				//imagestream << log2(SumImg[32*j+k]) << "\t";
 			}
 			imagestream << "\n";
@@ -945,16 +984,19 @@ int main(int argc, char *argv[])
 
 		if (!removeBGimg){
 			sprintf(fname,"%s.asbackground",argv[1]);
+			writeBinaryFile(bgarray, fname);
+/*
 			imagestream.open(fname,std::ios::out);
-			imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames of exposure = "<< exposure << "s\n";
+			//imagestream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames of exposure = "<< exposure << "s\n";
 			for(size_t j=0;j<64;j++)
 			{
 				for(size_t k=0;k<32;k++)
-					imagestream << (SumImg[32*j+k]/(nbatches * getnimages)) << "\t";
+					imagestream << (int)(SumImg[32*j+k]/(nbatches * getnimages)) << " ";
 				imagestream << "\n";
 			}		
 			imagestream << "\n";
 			imagestream.close();
+*/
 		}
 
 		free(fname);

@@ -17,6 +17,7 @@
 // http://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html
 // http://www.linuxassembly.org/articles/linasm.html
 // https://stackoverflow.com/questions/10374839/how-to-port-a-asm-code-to-vs-2008
+
 static inline uint16_t log2(const uint16_t x) {
   uint16_t y;
   asm ( "\tbsr %1, %0\n"
@@ -84,8 +85,8 @@ static inline uint64_t pow2( uint64_t b) {
 //		from SDK_Example.c	//
 //**************************************//
 
-// Calculate the mean value of a UInt16 image
-double mean(UInt16 * Img, UInt16 NPixel)
+namespace Utility{
+static inline double mean(UInt16 * Img, UInt16 NPixel)
 {
 	int i=0;
 	double res =0.0;
@@ -93,9 +94,7 @@ double mean(UInt16 * Img, UInt16 NPixel)
 		res+= (double)Img[i];
 	return res/(double)NPixel;
 }
-
-// Calculate the mean value of a double image 
-double mean_double(double * Img, UInt16 NPixel)
+static inline double mean_double(double * Img, UInt16 NPixel)
 {
 	int i=0;
 	double res =0.0;
@@ -103,14 +102,23 @@ double mean_double(double * Img, UInt16 NPixel)
 		res+= Img[i];
 	return res/(double)NPixel;
 }
-
-// Create an histogram of the distribution of photon counts over the imager
-void Hist(UInt16* Img, UInt16* hist)
+static inline void Hist(UInt16* Img, UInt16* hist)
 {
 	int i=0;
 	memset(hist,'\0',65535*sizeof(UInt16));
 	for(i=0;i<2048;i++)
 		hist[Img[i]]++;
+}
+/*
+// Calculate the mean value of a UInt16 image
+static inline double mean(UInt16 * Img, UInt16 NPixel);
+
+// Calculate the mean value of a double image 
+static inline double mean_double(double * Img, UInt16 NPixel);
+
+// Create an histogram of the distribution of photon counts over the imager
+static inline void Hist(UInt16* Img, UInt16* hist);
+*/
 }
 
 //**************************************//
@@ -119,7 +127,7 @@ void Hist(UInt16* Img, UInt16* hist)
 //**************************************//
 
 	template <typename T>
-std::istream& operator >> (std::istream & ins, std::vector<T> & record)
+extern inline std::istream& operator >> (std::istream & ins, std::vector<T> & record)
 {
 	record.clear();
 	std::string line;
@@ -137,7 +145,7 @@ std::istream& operator >> (std::istream & ins, std::vector<T> & record)
 }
 
 	template <typename T>
-std::istream& operator >> (std::istream & ins, std::vector< std::vector<T> > & matrix)
+extern inline std::istream& operator >> (std::istream & ins, std::vector< std::vector<T> > & matrix)
 {
 	matrix.clear();
 	std::vector<T> record;
@@ -150,7 +158,7 @@ std::istream& operator >> (std::istream & ins, std::vector< std::vector<T> > & m
 }
 
 	template <typename T>
-std::ostream& operator << (std::ostream & outs, std::vector< T > & record)
+extern inline std::ostream& operator << (std::ostream & outs, std::vector< T > & record)
 {
 	for (unsigned i=0;i<record.size();++i){
 		outs << record[i] << "\t";
@@ -160,7 +168,7 @@ std::ostream& operator << (std::ostream & outs, std::vector< T > & record)
 }
 
 	template <typename T>
-std::ostream& operator << (std::ostream & outs, std::vector< std::vector <T> > & matrix)
+extern inline std::ostream& operator << (std::ostream & outs, std::vector< std::vector <T> > & matrix)
 {
 	for (unsigned i=0;i<matrix.size();++i){
 		for (unsigned j=0;j<matrix[i].size();++j){
