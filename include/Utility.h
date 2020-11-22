@@ -15,6 +15,7 @@
 #include <time.h>
 #include <sys/time.h>
 
+
 // log2 methods from https://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c/994709
 // http://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html
 // http://www.linuxassembly.org/articles/linasm.html
@@ -34,7 +35,7 @@ namespace Utility{
 			std::fstream binaryIo;
 			binaryIo.open(fileName.c_str(), std::ios::out| std::ios::binary);
 			binaryIo.seekp(0);
-			std::cerr << "write out this many:\t" << sz << std::endl;
+			//std::cerr << "write out this many:\t" << sz << std::endl;
 			binaryIo.write((char*)(&sz), sizeof(size_t));
 			binaryIo.write((char*)(array), sz * sizeof(T));
 			/*
