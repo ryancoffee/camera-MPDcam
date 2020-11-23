@@ -39,7 +39,8 @@ information.
 #include <time.h>
 #include <stdlib.h>
 #include <cstdlib>
-#include <string.h>
+#include <string>
+#include <sstream>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -50,6 +51,7 @@ information.
 #include "Utility.h"
 #include "mpdHist_tofile.h"
 #include "opencv2/core.hpp"
+#include "opencv2/highgui.hpp"
 
 
 //***********************************//
@@ -174,26 +176,44 @@ int main(int argc, char *argv[])
 	switch(c)
 	{
 	case '0'://Test live mode
+		{
 		//SPC3 constructor and parameter setting
 		SPC3_Constr(&spc3, Normal,"");
-		SPC3_Set_Camera_Par(spc3, 1, 1,1,1,Disabled,Disabled,Disabled);		
+		SPC3_Set_Camera_Par(spc3, 1, 1,5,1,Disabled,Disabled,Disabled);		
 		SPC3_Set_Trigger_Out_State(spc3,Frame);
 		SPC3_Apply_settings(spc3); 
 		SPC3_Set_Live_Mode_ON(spc3);
 		//Acquistion of 10 live images
-		for(i=0;i<5;i++)
+		for(size_t i=0;i<5;i++)
 		{
+			std::ostringstream ss;
+			ss << "Image_" << i;
 			printf("Image %d:\n",i);
-			SPC3_Get_Live_Img(spc3, Img);
-			for(j=0;j<32;j++)
+			cv::Mat mat(64,32,CV_16UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
+			const uint8_t scale(16);
+			cv::Mat outmat(scale*64,scale*32,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
+			//SPC3_Get_Live_Img(spc3, Img);
+			SPC3_Get_Live_Img(spc3, (uint16_t*) mat.data); // livemode usees uint16_t it seems, so multiplying by 2**8 for imshow
+			for(size_t j=0;j<64;j++)
 			{
-				for(k=0;k<32;k++)
-					printf("%d ",Img[32*j+k]);
+				for(size_t k=0;k<32;k++){
+					for(size_t m=0;m<scale;m++){
+						for(size_t n=0;n<scale;n++){
+							outmat.at<uint8_t>(scale*j+n,scale*k+m) = (uint8_t) mat.at<uint16_t>(j,k);
+						}
+					}
+					printf("%d ",(uint8_t) mat.at<uint16_t>(j,k));
+				}
 				printf("\n");
 			}		
+			cv::namedWindow(ss.str());
+			cv::imshow(ss.str(),outmat.t()); // mat.mul(256) so that it is visible when rendered via imshow, outmat is set to CV_8UC1 so it shouldn't need mul(256)
 		}
 		//Live mode off
 		SPC3_Set_Live_Mode_OFF(spc3);						
+		cv::waitKey(0);
+		cv::destroyAllWindows();
+		}
 		break;
 
 	case '1'://NULL
@@ -312,6 +332,9 @@ int main(int argc, char *argv[])
                         break;
 		} 
 		{
+		std::string samplewindow("sample image");
+		cv::namedWindow(samplewindow.c_str());
+
 		size_t sz(2048);
 		bool removeBGimg = false;
 		bgfname = (char*) calloc(256,sizeof(char));
@@ -340,7 +363,7 @@ int main(int argc, char *argv[])
 		SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
 		exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
 		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
-		const uint16_t nframeinteg = 1; // this seems to fail if I set this to 100
+		const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
 		if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
 			free(bgfname);
 			free(fname);
@@ -377,10 +400,10 @@ int main(int argc, char *argv[])
 					getnimages -= 4;
 				}
 				//std::cerr << "bytes per pixel = " << bytesPpix << "\twas the resoponse of int(*(buff))\n" << std::flush;
-				for (size_t o=0;o<2048*(getnimages/nframeinteg-1);o++){
+				for (size_t o=0;o<2048*getnimages-1;o++){
 					uint8_t v;
 					uint8_t bg;
-					v = (*(buff+1+o*bytesPpix));
+					v = (uint8_t)(*(buff+1+o*bytesPpix));
 					//v = (*(buff+(o+1)*bytesPpix));
 					if (removeBGimg){
 						bg = bgarray[o%2048];
@@ -397,6 +420,24 @@ int main(int argc, char *argv[])
 						if ((o+1)%32 == 0)
 							std::cout << "\n";
 					}	
+				}
+				if (b%100==0)  // sample image to screen
+				{
+					cv::Mat mat(64,32,CV_8UC1,(void*)buff+1);//,32*sizeof(uint8_t));
+					const uint8_t scale(16);
+					cv::Mat outmat(scale*64,scale*32,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
+					for(size_t j=0;j<64;j++)
+					{
+						for(size_t k=0;k<32;k++){
+							for(size_t m=0;m<scale;m++){
+								for(size_t n=0;n<scale;n++){
+									outmat.at<uint8_t>(scale*j+n,scale*k+m) = (uint8_t) mat.at<uint8_t>(j,k);
+								}
+							}
+						}
+					}		
+					cv::imshow(samplewindow.c_str(),outmat.t()); // mat.mul(256) so that it is visible when rendered via imshow, outmat is set to CV_8UC1 so it shouldn't need mul(256)
+					cv::waitKey(0);
 				}
 			}
 			histstream.open(fname,std::ios::out);
@@ -454,6 +495,7 @@ int main(int argc, char *argv[])
 			Utility::writeBinaryFile(bgarray,sz, fname);
 		}
 
+		cv::destroyAllWindows();
 		free(fname);
 		free(bgfname);
 		break;

@@ -3,6 +3,7 @@ DEBUG=-g -ggdb
 SRCDIR=./src/
 OUTDIR=./bin/64
 LIBDIR=/MPDcam/spc3/Linux/lib/64/
+CVLIB=`pkg-config --libs /opt/installation/OpenCV-master/lib64/pkgconfig/opencv4.pc`
 CVFLAGS=`pkg-config --cflags --libs /opt/installation/OpenCV-master/lib64/pkgconfig/opencv4.pc`
 CFLAGS=-Wall -pedantic -I./include -m64 -std=c++11
 EXECUTABLE=mpdHist_tofile
