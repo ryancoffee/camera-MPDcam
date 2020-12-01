@@ -45,6 +45,8 @@ information.
 #include <fstream>
 #include <vector>
 #include <unistd.h>
+#include <chrono> // millisecond system_clock
+#include <thread> // sleep_for sleep_until
 
 #include <stdint.h>
 
@@ -100,7 +102,7 @@ int main(int argc, char *argv[])
 	FILE* f= NULL;
 	time_t start,stop;
 	char *Test[] = { "Live mode: write on stdout 5 images", //0
-					 "Holdoff: mean number of photons at different holdoff values", //1
+					 "OpenCV monitor mode: update images in window", //1
 					 "NULL", //2
 					 "NULL", //3
 					 "NULL", //4
@@ -208,6 +210,7 @@ int main(int argc, char *argv[])
 			}		
 			cv::namedWindow(ss.str());
 			cv::imshow(ss.str(),outmat.t()); // mat.mul(256) so that it is visible when rendered via imshow, outmat is set to CV_8UC1 so it shouldn't need mul(256)
+			std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		}
 		//Live mode off
 		SPC3_Set_Live_Mode_OFF(spc3);						
@@ -216,7 +219,66 @@ int main(int argc, char *argv[])
 		}
 		break;
 
-	case '1'://NULL
+	case '1'://OpenCV monitor mode
+		{
+			BUFFER_H mybuff = NULL; 
+			SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
+			exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+			uint16_t getnimages(16); // UINT16_MAX - 2; // giving one extra for size
+			const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
+			if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
+				free(mybuff);
+				break;
+			}		
+			//SPC3 constructor and parameter setting
+			SPC3_Set_Trigger_Out_State(spc3,Frame);
+			SPC3_Apply_settings(spc3); 
+			SPC3_Set_Live_Mode_OFF(spc3);
+			const uint8_t scale(16);
+			std::ostringstream ss;
+			ss << "Image monitor";
+			cv::namedWindow(ss.str());
+			cv::Mat mat(64,32,(uint8_t*)mybuff,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
+			cv::Mat outmat(scale*64,scale*32,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
+			for(size_t i=0;i<5;i++)
+			{
+				printf("Image %d:\n",i);
+				const uint8_t scale(16);
+				//SPC3_Get_Live_Img(spc3, Img);
+				SPC3_Prepare_Snap(spc3);
+				SPC3_Get_Snap(spc3);
+				if (SPC3_Get_Image_Buffer ( spc3, &mybuff ) == OK)
+				{
+					unsigned bytesPpix = unsigned(*(mybuff))/8; // checking the first bit to see if vector is 8 bits or 16.
+					if (bytesPpix > 1){ // only check on the first pass
+						getnimages /= 2;
+						getnimages -= 4;
+					}
+					for(size_t j=0;j<64;j++)
+					{
+						for(size_t k=0;k<32;k++){
+							for(size_t m=0;m<scale;m++){
+								for(size_t n=0;n<scale;n++){
+									outmat.at<uint8_t>(scale*j+n,scale*k+m) = (uint8_t) mat.at<uint16_t>(j,k);
+								}
+							}
+							printf("%d ",(uint8_t) mat.at<uint16_t>(j,k));
+						}
+						printf("\n");
+					}		
+					cv::imshow(ss.str(),outmat.t()); // mat.mul(256) so that it is visible when rendered via imshow, outmat is set to CV_8UC1 so it shouldn't need mul(256)
+					std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+				}
+			}
+			cv::waitKey(0);
+			cv::destroyAllWindows();
+			if (mybuff != NULL)
+			{
+				free(mybuff);
+				mybuff = NULL;
+			}
+		}
+		break;
 		break;
 
 	case '2': //NULL
@@ -273,14 +335,15 @@ int main(int argc, char *argv[])
 		size_t fnum = 0;
 		for(i=0;i<nimages;i++)
 		{
-			SPC3_Get_Live_Img(spc3, Img);
+			cv::Mat mat(64,32,CV_16UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
+			SPC3_Get_Live_Img(spc3, (uint16_t*) mat.data); // livemode usees uint16_t it seems, so multiplying by 2**8 for imshow
 			for (int n=0;n<2048;n++){
-				if (Img[n]>0)
-					if (hist16[ Img[n] ] == UINT16_MAX){
-						hist16[ Img[n] ] = 0;
-						hist16_rollover[ Img[n] ]++;
+				if (mat.data[n]>0)
+					if (hist16[ mat.data[n] ] == UINT16_MAX){
+						hist16[ mat.data[n] ] = 0;
+						hist16_rollover[ mat.data[n] ]++;
 					} else {
-						hist16[ Img[n] ]++;
+						hist16[ mat.data[n] ]++;
 					}
 			}
 			if (i%10000==0){
