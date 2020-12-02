@@ -238,7 +238,6 @@ int main(int argc, char *argv[])
 			std::ostringstream ss;
 			ss << "Image monitor";
 			cv::namedWindow(ss.str());
-			cv::Mat mat(64,32,(uint8_t*)mybuff,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
 			cv::Mat outmat(scale*64,scale*32,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
 			for(size_t i=0;i<5;i++)
 			{
@@ -254,27 +253,30 @@ int main(int argc, char *argv[])
 						getnimages /= 2;
 						getnimages -= 4;
 					}
-					for(size_t j=0;j<64;j++)
+					outmat = 0;
+					for (size_t f=0;f<getnimages;f++)
 					{
-						for(size_t k=0;k<32;k++){
-							for(size_t m=0;m<scale;m++){
-								for(size_t n=0;n<scale;n++){
-									outmat.at<uint8_t>(scale*j+n,scale*k+m) = (uint8_t) mat.at<uint16_t>(j,k);
+						cv::Mat mat(64,32,CV_8UC1,(void*)mybuff + 1 + f*2048*bytesPpix );// ,(void*)Img);//,64*sizeof(uint8_t));
+						for(size_t j=0;j<64;j++)
+						{
+							for(size_t k=0;k<32;k++){
+								for(size_t m=0;m<scale;m++){
+									for(size_t n=0;n<scale;n++){
+										outmat.at<uint8_t>(scale*j+n,scale*k+m) += (uint8_t) mat.at<uint8_t>(j,k);
+									}
 								}
 							}
-							printf("%d ",(uint8_t) mat.at<uint16_t>(j,k));
-						}
-						printf("\n");
-					}		
+						}		
+					}
 					cv::imshow(ss.str(),outmat.t()); // mat.mul(256) so that it is visible when rendered via imshow, outmat is set to CV_8UC1 so it shouldn't need mul(256)
-					std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+					//std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+					cv::waitKey(0);
 				}
 			}
-			cv::waitKey(0);
 			cv::destroyAllWindows();
 			if (mybuff != NULL)
 			{
-				free(mybuff);
+				//free(mybuff);
 				mybuff = NULL;
 			}
 		}
