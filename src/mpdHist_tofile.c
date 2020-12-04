@@ -238,7 +238,7 @@ int main(int argc, char *argv[])
 			std::ostringstream ss;
 			ss << "Image monitor";
 			cv::namedWindow(ss.str());
-			cv::Mat outmat(scale*64,scale*32,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
+			cv::Mat outmat(64,32,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
 			for(size_t i=0;i<5;i++)
 			{
 				printf("Image %d:\n",i);
@@ -257,19 +257,13 @@ int main(int argc, char *argv[])
 					for (size_t f=0;f<getnimages;f++)
 					{
 						cv::Mat mat(64,32,CV_8UC1,(void*)mybuff + 1 + f*2048*bytesPpix );// ,(void*)Img);//,64*sizeof(uint8_t));
-						for(size_t j=0;j<64;j++)
-						{
-							for(size_t k=0;k<32;k++){
-								for(size_t m=0;m<scale;m++){
-									for(size_t n=0;n<scale;n++){
-										outmat.at<uint8_t>(scale*j+n,scale*k+m) += (uint8_t) mat.at<uint8_t>(j,k);
-									}
-								}
+						for (size_t j=0;j<32;j++){
+							for (size_t k=0;k<64;k++){
+								outmat.at<uint8_t>(j,k) += mat.at<uint8_t>(j,k);
 							}
-						}		
+						}
 					}
 					cv::imshow(ss.str(),outmat.t()); // mat.mul(256) so that it is visible when rendered via imshow, outmat is set to CV_8UC1 so it shouldn't need mul(256)
-					//std::this_thread::sleep_for(std::chrono::milliseconds(10000));
 					cv::waitKey(0);
 				}
 			}
@@ -398,7 +392,7 @@ int main(int argc, char *argv[])
 		} 
 		{
 		std::string samplewindow("sample image");
-		cv::namedWindow(samplewindow.c_str());
+		//cv::namedWindow(samplewindow.c_str());
 
 		size_t sz(2048);
 		bool removeBGimg = false;
@@ -486,9 +480,18 @@ int main(int argc, char *argv[])
 							std::cout << "\n";
 					}	
 				}
-				if (b%100==0)  // sample image to screen
+/*
+				if (b%100==0)  // sample image to term
 				{
 					cv::Mat mat(64,32,CV_8UC1,(void*)buff+1);//,32*sizeof(uint8_t));
+
+					for(size_t j=0;j<64;j++)
+					{
+						for(size_t k=0;k<32;k++){
+							std::cout << mat.at<utint8_t>(j,k) << ' ';
+						}
+						std::cout << '\n' << std::flush;
+					}
 					const uint8_t scale(16);
 					cv::Mat outmat(scale*64,scale*32,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
 					for(size_t j=0;j<64;j++)
@@ -504,6 +507,7 @@ int main(int argc, char *argv[])
 					cv::imshow(samplewindow.c_str(),outmat.t()); // mat.mul(256) so that it is visible when rendered via imshow, outmat is set to CV_8UC1 so it shouldn't need mul(256)
 					cv::waitKey(0);
 				}
+*/
 			}
 			histstream.open(fname,std::ios::out);
 			histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages * nframeinteg) << "\tframes\n";
@@ -560,7 +564,7 @@ int main(int argc, char *argv[])
 			Utility::writeBinaryFile(bgarray,sz, fname);
 		}
 
-		cv::destroyAllWindows();
+		//cv::destroyAllWindows();
 		free(fname);
 		free(bgfname);
 		break;
