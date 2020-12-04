@@ -45,9 +45,6 @@ information.
 #include <fstream>
 #include <vector>
 #include <unistd.h>
-#include <algorithm> // possibly for the std::accumulate and related
-#include <functional> // Only if I'm using lambdas for the accumulate functions for centroiding row-wise distributions.
-
 #include <chrono> // millisecond system_clock
 #include <thread> // sleep_for sleep_until
 
@@ -106,7 +103,7 @@ int main(int argc, char *argv[])
 	time_t start,stop;
 	char *Test[] = { "Live mode: write on stdout 5 images", //0
 					 "OpenCV monitor mode: update images in window", //1
-					 "Dump nframes uint8_t", //2
+					 "NULL", //2
 					 "NULL", //3
 					 "NULL", //4
 					 "NULL", //5
@@ -114,11 +111,11 @@ int main(int argc, char *argv[])
 					 "NULL", //7
 					 "NULL", //8
 					 "NULL", //9
-					"Live mode: main <argv[1] is filehead> <argv[2] is nimages>", //a
+					 "NULL", //a
 					"NULL", //b
 					"NULL", //c
-					"row sum hist: main <argv[1] is filehead> <argv[2] is nimages> <argv[3] is optional bgfile>.", //d
-					"Acquire histogram: main <argv[1] is filehead> <argv[2] is nimages> <argv[3] is optional bgfile>" //e
+					"Live mode: main <argv[1] is filehead> <argv[2] is nimages>", //d
+					"Acquire histogram: main <argv[1] is filehead> <argv[2] is nimages>" //e
 					};
 	Imgd =(double*) calloc(1, 2048* sizeof(double));
 	Img =(UInt16*) calloc(1, 2048* sizeof(UInt16));
@@ -196,31 +193,29 @@ int main(int argc, char *argv[])
 			printf("Image %d:\n",i);
 			cv::Mat mat(64,32,CV_16UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
 			const uint8_t scale(16);
-			//cv::Mat outmat(scale*64,scale*32,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
+			cv::Mat outmat(scale*64,scale*32,CV_8UC1);// ,(void*)Img);//,64*sizeof(uint8_t));
 			//SPC3_Get_Live_Img(spc3, Img);
 			SPC3_Get_Live_Img(spc3, (uint16_t*) mat.data); // livemode usees uint16_t it seems, so multiplying by 2**8 for imshow
 			for(size_t j=0;j<64;j++)
 			{
 				for(size_t k=0;k<32;k++){
-					/*
- * 					for(size_t m=0;m<scale;m++){
+					for(size_t m=0;m<scale;m++){
 						for(size_t n=0;n<scale;n++){
 							outmat.at<uint8_t>(scale*j+n,scale*k+m) = (uint8_t) mat.at<uint16_t>(j,k);
 						}
 					}
-					*/
 					printf("%d ",(uint8_t) mat.at<uint16_t>(j,k));
 				}
 				printf("\n");
 			}		
-			//cv::namedWindow(ss.str());
-			//cv::imshow(ss.str(),outmat.t()); // mat.mul(256) so that it is visible when rendered via imshow, outmat is set to CV_8UC1 so it shouldn't need mul(256)
+			cv::namedWindow(ss.str());
+			cv::imshow(ss.str(),outmat.t()); // mat.mul(256) so that it is visible when rendered via imshow, outmat is set to CV_8UC1 so it shouldn't need mul(256)
 			std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		}
 		//Live mode off
 		SPC3_Set_Live_Mode_OFF(spc3);						
-		//cv::waitKey(0);
-		//cv::destroyAllWindows();
+		cv::waitKey(0);
+		cv::destroyAllWindows();
 		}
 		break;
 
@@ -251,10 +246,8 @@ int main(int argc, char *argv[])
 				//SPC3_Get_Live_Img(spc3, Img);
 				SPC3_Prepare_Snap(spc3);
 				SPC3_Get_Snap(spc3);
-				if (SPC3_Get_Image_Buffer ( spc3, &mybuff ) != OK)
+				if (SPC3_Get_Image_Buffer ( spc3, &mybuff ) == OK)
 				{
-					free(mybuff);
-				} else {
 					unsigned bytesPpix = unsigned(*(mybuff))/8; // checking the first bit to see if vector is 8 bits or 16.
 					if (bytesPpix > 1){ // only check on the first pass
 						getnimages /= 2;
@@ -284,8 +277,7 @@ int main(int argc, char *argv[])
 		break;
 		break;
 
-	case '2': //dump nframes uint8_t
-		std::cout << "No code here yet" << std::endl << std::flush;
+	case '2': //NULL
 		break;
 
 	case '3'://NULL
@@ -309,7 +301,14 @@ int main(int argc, char *argv[])
 	case '9': // NULL
 		break;
 
-	case 'a': // Live mode
+	case 'a': // NULL
+		break;
+
+	case 'b': // NULL
+		break;
+	case 'c': // NULL
+		break;
+	case 'd': // Live mode
 		//SPC3 constructor and parameter setting
 		fname = (char*) calloc(256,sizeof(char));
 		if (argc < 3) {
@@ -379,97 +378,6 @@ int main(int argc, char *argv[])
 		free(fname);
 		break;
 		}
-	case 'b': // NULL
-		break;
-	case 'c': // NULL
-		break;
-	case 'd': // row sum hist
-		{
-		if (argc < 3) {
-                        std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nbatches> <optional background img> =======\n" << std::endl;
-                        break;
-		} 
-		if (argc > 3) { 
-			std::cout << "background subtraction not yet implemented" << std::endl;
-			break;
-		}
-		size_t nbatches = std::atoi(argv[2]);
-		cv::Mat mat(64,32,CV_8UC1);//,32*sizeof(uint8_t));
-		mat = uint8_t(0);
-
-		BUFFER_H mybuff = NULL;
-		fname = (char*) calloc(256,sizeof(char));
-		sprintf(fname,"%s.rowsumhist",argv[1]);
-		std::cout << "histogram fname = " << fname << std::endl;
-
-		std::vector<uint64_t> SumImg(2048,0); // initializing to 0 eventhough log2(1) = 0 so we won't distinguish single counts and no counts.
-
-		SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		exposure = 16; // If we are in normal mode, exposure is not used, instead it is just the span of time 
-		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
-		const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
-		if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
-			free(fname);
-		} else {
-			double wall0 = get_wall_time<double>();
-			double cpu0  = get_cpu_time<double>();
-
-			std::vector<size_t> hist16((size_t) UINT16_MAX+1 , 0);
-			SPC3_Set_Trigger_Out_State(spc3,Frame);
-			SPC3_Set_Live_Mode_OFF(spc3);
-			SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
-			SPC3_Apply_settings(spc3); 
-			size_t nbatches = std::atoi(argv[2]);
-
-			uint16_t rowsum(0);
-			for (size_t b=0;b<nbatches;b++){
-				std::cout << "Working batch " << b << std::endl;
-				SPC3_Prepare_Snap(spc3);
-				SPC3_Get_Snap(spc3);
-				if (SPC3_Get_Image_Buffer ( spc3, &mybuff ) != OK)
-				{
-					free(mybuff);
-				} else {
-					unsigned bytesPpix = unsigned(*(mybuff))/8; // checking the first bit to see if vector is 8 bits or 16.
-					uint8_t v(0);
-					if (b == 0 && bytesPpix > 1){ // only check on the first pass
-						getnimages /= 2;
-						getnimages -= 4;
-					}
-					for (size_t r = 0;r<2048*getnimages;r += 32){
-						rowsum = std::accumulate(mybuff+1+r*bytesPpix , mybuff+1+(r+32)*bytesPpix , 0);
-						hist16[rowsum] ++;
-						if (b%10==0 && r<(4096+2048)){
-							std::cout << rowsum << ' ';
-							if ((r+1)%2048==0){
-								std::cout << "\n";
-							}
-						}
-					}
-				}
-			}
-			//  Stop timers
-			double wall1 = get_wall_time();
-			double cpu1  = get_cpu_time();
-			double runtime = (wall1 - wall0);
-			double cputime = (cpu1 - cpu0);
-
-			histstream.open(fname,std::ios::out);
-			histstream << "#\tvalue\thist256\tlog2(hist256)\n#\tfrom \t" << (nbatches * getnimages) << "\tframes\n";
-			histstream << "#image capture and process time was " << runtime << "s for " << (nbatches * getnimages) << " frames\n#\t" << cputime << " cpu time" << std::endl;
-			histstream << "#actual captured laser pulses is pulse spacing ~10ns * exposure (in units of 10 ns) " << runtime << "s for " << (nbatches * getnimages * exposure) << " pulses\n#\t" << cputime << " cpu time" << std::endl;
-			for (size_t j=0;j<hist256.size();j++){
-				histstream << j << "\t" << hist16[j] << "\t" << log2(hist16[j]) << "\n";
-				if (j<8)
-					std::cout << j << "\t" << hist16[j] << "\t" << log2(hist16[j]) << "\n";
-			}
-			histstream << std::endl;
-			histstream.close();
-		}
-		}
-		break;
-
 	case 'e': 
 		/* 
 		 * this option forces 8 bit images and processes a nearly full buffer, 
@@ -479,19 +387,19 @@ int main(int argc, char *argv[])
 		 * signed the result of a subtraction of 2 8 bit ints.
 		 */
 		if (argc < 3) {
-			std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nbatches> <optional background img> =======\n" << std::endl;
-			break;
+                        std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nbatches> <optional background img> =======\n" << std::endl;
+                        break;
 		} 
 		{
-			//std::string samplewindow("sample image");
-			//cv::namedWindow(samplewindow.c_str());
+		std::string samplewindow("sample image");
+		//cv::namedWindow(samplewindow.c_str());
 
-			size_t sz(2048);
-			bool removeBGimg = false;
-			bgfname = (char*) calloc(256,sizeof(char));
-			bgarray = (uint8_t*) calloc(2048,sizeof(uint8_t));
-			if (argc > 3) { 
-				removeBGimg = true; 
+		size_t sz(2048);
+		bool removeBGimg = false;
+		bgfname = (char*) calloc(256,sizeof(char));
+		bgarray = (uint8_t*) calloc(2048,sizeof(uint8_t));
+		if (argc > 3) { 
+			removeBGimg = true; 
 			sprintf(bgfname,"%s",argv[3]);
 			Utility::readBinaryFile(bgfname,sz,bgarray);
 			std::cout << "bgarray = \n" << std::endl;
@@ -537,10 +445,8 @@ int main(int argc, char *argv[])
 			std::cout << "Working batch " << b << std::endl;
 			SPC3_Prepare_Snap(spc3);
 			SPC3_Get_Snap(spc3);
-			if (SPC3_Get_Image_Buffer ( spc3, &buff ) != OK)
+			if (SPC3_Get_Image_Buffer ( spc3, &buff ) == OK)
 			{
-				free(buff);
-			} else {
 				/*
 				   Get the pointer to the image buffer in which snap acquisition is stored.
 				   The first byte indicates if data is 8 or 16 bit. WARNING User must pay attention not to exceed the dimension of the
@@ -661,8 +567,8 @@ int main(int argc, char *argv[])
 		//cv::destroyAllWindows();
 		free(fname);
 		free(bgfname);
-		}
 		break;
+		}
 
 
 	default:
