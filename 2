@@ -73,17 +73,6 @@ int main(int argc, char *argv[])
 //////////////////////////
 // variables definition //
 //////////////////////////
-//
-	std::vector<int> tiff_compression_params;
-	tiff_compression_params.push_back(cv::IMWRITE_TIFF_XDPI);
-	tiff_compression_params.push_back(32);
-	tiff_compression_params.push_back(cv::IMWRITE_TIFF_YDPI);
-	tiff_compression_params.push_back(32);
-
-	std::vector<int> png_compression_params;
-    	png_compression_params.push_back(cv::IMWRITE_PNG_COMPRESSION);
-    	png_compression_params.push_back(5); // 0 is fastest, lowest compression
-
 	std::cout << "Remember, if writing ascii to file (options 'd,e'), give the filehead (and maybe nimages) in the command" << std::endl;
 	SPC3_H spc3= NULL;
 	UInt16* Img= NULL;
@@ -419,7 +408,6 @@ int main(int argc, char *argv[])
 			SPC3_Set_Live_Mode_OFF(spc3);
 			SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
 			SPC3_Apply_settings(spc3); 
-			size_t last=0;
 			while (totalimages > getnimages){
 				if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
 					free(fname);
@@ -438,18 +426,16 @@ int main(int argc, char *argv[])
 							getnimages -= 4;
 						}
 						for (size_t ptr=0;ptr < getnimages*2048;ptr += 2048){
-							cv::Mat img(64,32,cv::CV_8UC1,(void*)(*(mybuff+1+ptr*bytesPpix));
+							cv::Mat img(64,32,(uint8_t*)(*(mybuff+1+ptr*bytesPpix));
 							sprintf(fname,"%s.imdump.%05i.tiff",argv[1],ptr/2048+last));
-							cv::imwrite(fname,img,tiff_compression_params);
+							cv::imwrite();
 						}
 						totalimages -= getnimages;
-						last += getnimages;
 					}
 				}
 			}
 			if (totalimages > 0){
-				getnimages = totalimages;
-				if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
+				if ( SPC3_Set_Camera_Par(spc3, exposure, totalimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
 					free(fname);
 				} else {
 					SPC3_Prepare_Snap(spc3);
@@ -459,15 +445,6 @@ int main(int argc, char *argv[])
 						free(mybuff);
 					} else {
 						unsigned bytesPpix = unsigned(*(mybuff))/8; // checking the first bit to see if vector is 8 bits or 16.
-						if (bytesPpix > 1){ // only check on the first pass
-							getnimages /= 2;
-							getnimages -= 4;
-						}
-						for (size_t ptr=0;ptr < getnimages*2048;ptr += 2048){
-							cv::Mat img(64,32,cv::CV_8UC1,(void*)(*(mybuff+1+ptr*bytesPpix));
-							sprintf(fname,"%s.imdump.%05i.tiff",argv[1],ptr/2048+last));
-							cv::imwrite(fname,img,tiff_compression_params);
-						}
 					}
 				}
 
