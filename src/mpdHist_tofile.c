@@ -410,8 +410,11 @@ int main(int argc, char *argv[])
 			SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
 			//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
 			exposure = 16; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+			uint64_t totalimages = atoi(argv[2]);
 			uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
-			uint64_t totalimages = uint64_t(argv[1]);
+			if (totalimages < getnimages){
+				getnimages = totalimages;
+			}
 			const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
 			double wall0 = get_wall_time<double>();
 			double cpu0  = get_cpu_time<double>();
@@ -420,7 +423,10 @@ int main(int argc, char *argv[])
 			SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
 			SPC3_Apply_settings(spc3); 
 			size_t last=0;
+			//std::cout << "max channels = " << CV_CN_MAX << std::endl;
+			//std::vector<int> ndshape = {64,32,getnimages};
 			while (totalimages > getnimages){
+				std::cout << "getting " << getnimages << " images" << std::endl;
 				if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
 					free(fname);
 				} else {
@@ -438,9 +444,11 @@ int main(int argc, char *argv[])
 							getnimages -= 4;
 						}
 						for (size_t ptr=0;ptr < getnimages*2048;ptr += 2048){
-							cv::Mat img(64,32,cv::CV_8UC1,(void*)(*(mybuff+1+ptr*bytesPpix));
-							sprintf(fname,"%s.imdump.%05i.tiff",argv[1],ptr/2048+last));
-							cv::imwrite(fname,img,tiff_compression_params);
+							void* imPtr = (void*)(mybuff+1+ptr*bytesPpix);
+							cv::Mat img(64,32,CV_8UC1,imPtr);
+							sprintf(fname,"%s.imdump.%05i.png",argv[1],ptr/2048+last);
+							cv::normalize(img, img, 0, 255,cv::NORM_MINMAX,CV_8UC1);
+							cv::imwrite(fname,img,png_compression_params);
 						}
 						totalimages -= getnimages;
 						last += getnimages;
@@ -449,13 +457,16 @@ int main(int argc, char *argv[])
 			}
 			if (totalimages > 0){
 				getnimages = totalimages;
+				std::cout << "getting " << getnimages << " images" << std::endl;
 				if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
+					std::cout << "didn't set the camera pars" << std::endl;
 					free(fname);
 				} else {
 					SPC3_Prepare_Snap(spc3);
 					SPC3_Get_Snap(spc3);
 					if (SPC3_Get_Image_Buffer ( spc3, &mybuff ) != OK)
 					{
+						std::cout << "didn't get snap and get image buffer" << std::endl;
 						free(mybuff);
 					} else {
 						unsigned bytesPpix = unsigned(*(mybuff))/8; // checking the first bit to see if vector is 8 bits or 16.
@@ -463,14 +474,18 @@ int main(int argc, char *argv[])
 							getnimages /= 2;
 							getnimages -= 4;
 						}
+						//cv::Mat img(std::vector<int>())
 						for (size_t ptr=0;ptr < getnimages*2048;ptr += 2048){
-							cv::Mat img(64,32,cv::CV_8UC1,(void*)(*(mybuff+1+ptr*bytesPpix));
-							sprintf(fname,"%s.imdump.%05i.tiff",argv[1],ptr/2048+last));
-							cv::imwrite(fname,img,tiff_compression_params);
+							//std::cout << "Image " << int(ptr/2048) << std::endl;
+							void* imPtr = (void*)(mybuff+1+ptr*bytesPpix);
+							cv::Mat img(64,32,CV_8UC1,imPtr);
+							//std::cout << "img now set to imPtr" << std::endl;
+							sprintf(fname,"%s.imdump.%05i.png",argv[1],ptr/2048+last);
+							cv::normalize(img, img, 0, 255,cv::NORM_MINMAX,CV_8UC1);
+							cv::imwrite(fname,img,png_compression_params);
 						}
 					}
 				}
-
 			}
 		}
 		break;
