@@ -80,6 +80,10 @@ int main(int argc, char *argv[])
 	tiff_compression_params.push_back(cv::IMWRITE_TIFF_YDPI);
 	tiff_compression_params.push_back(32);
 
+	std::vector<int> jpg_compression_params;
+	jpg_compression_params.push_back(cv::IMWRITE_JPEG_QUALITY);
+	jpg_compression_params.push_back(100);
+
 	std::vector<int> png_compression_params;
     	png_compression_params.push_back(cv::IMWRITE_PNG_COMPRESSION);
     	png_compression_params.push_back(5); // 0 is fastest, lowest compression
@@ -411,7 +415,8 @@ int main(int argc, char *argv[])
 			//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
 			exposure = 16; // If we are in normal mode, exposure is not used, instead it is just the span of time 
 			uint64_t totalimages = atoi(argv[2]);
-			uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
+			uint16_t getnimages = UINT8_MAX - 2; // giving one extra for size
+			//uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
 			if (totalimages < getnimages){
 				getnimages = totalimages;
 			}
@@ -446,9 +451,9 @@ int main(int argc, char *argv[])
 						for (size_t ptr=0;ptr < getnimages*2048;ptr += 2048){
 							void* imPtr = (void*)(mybuff+1+ptr*bytesPpix);
 							cv::Mat img(64,32,CV_8UC1,imPtr);
-							sprintf(fname,"%s.imdump.%05i.png",argv[1],ptr/2048+last);
+							sprintf(fname,"%s.imdump.%05i.jpg",argv[1],ptr/2048+last);
 							cv::normalize(img, img, 0, 255,cv::NORM_MINMAX,CV_8UC1);
-							cv::imwrite(fname,img,png_compression_params);
+							cv::imwrite(fname,img,jpg_compression_params);
 						}
 						totalimages -= getnimages;
 						last += getnimages;
@@ -480,9 +485,9 @@ int main(int argc, char *argv[])
 							void* imPtr = (void*)(mybuff+1+ptr*bytesPpix);
 							cv::Mat img(64,32,CV_8UC1,imPtr);
 							//std::cout << "img now set to imPtr" << std::endl;
-							sprintf(fname,"%s.imdump.%05i.png",argv[1],ptr/2048+last);
+							sprintf(fname,"%s.imdump.%05i.jpg",argv[1],ptr/2048+last);
 							cv::normalize(img, img, 0, 255,cv::NORM_MINMAX,CV_8UC1);
-							cv::imwrite(fname,img,png_compression_params);
+							cv::imwrite(fname,img,jpg_compression_params);
 						}
 					}
 				}
