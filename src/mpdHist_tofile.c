@@ -95,7 +95,6 @@ int main(int argc, char *argv[])
 	UInt16 AppliedDT=0;
 	std::vector<uint64_t> hist256(256,0);
 
-	uint8_t exposure(20);// this is in units of 10 ns exposure
 	std::ofstream histstream;
 	std::ofstream imagestream;
 
@@ -121,7 +120,7 @@ int main(int argc, char *argv[])
 	time_t start,stop;
 	char *Test[] = { "Live mode: write on stdout 5 images", //0
 					 "OpenCV monitor mode: update images in window", //1
-					 "Dump nframes uint8_t", //2
+					 "NULL", //2
 					 "NULL", //3
 					 "NULL", //4
 					 "NULL", //5
@@ -131,7 +130,7 @@ int main(int argc, char *argv[])
 					 "NULL", //9
 					"Live mode: main <argv[1] is filehead> <argv[2] is nimages>", //a
 					"Dump nimages: main <argv[1] is filehead> <argv[2] is nimages> <argv[3] is optional bgfile>", //b
-					"NULL", //c
+					"Dump sparse nimages as ascii: main <argv[1] is filehead> <argv[2] is minutes of acquisition>", //c
 					"row sum hist: main <argv[1] is filehead> <argv[2] is nbatches> <argv[3] is optional bgfile>.", //d
 					"Acquire histogram: main <argv[1] is filehead> <argv[2] is nbatches> <argv[3] is optional bgfile>" //e
 					};
@@ -243,7 +242,7 @@ int main(int argc, char *argv[])
 		{
 			BUFFER_H mybuff = NULL; 
 			SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-			exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+			uint16_t exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
 			uint16_t getnimages(16); // UINT16_MAX - 2; // giving one extra for size
 			const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
 			if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
@@ -299,8 +298,7 @@ int main(int argc, char *argv[])
 		break;
 		break;
 
-	case '2': //dump nframes uint8_t
-		std::cout << "No code here yet" << std::endl << std::flush;
+	case '2': //NULL
 		break;
 
 	case '3'://NULL
@@ -334,7 +332,7 @@ int main(int argc, char *argv[])
 		//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
 		//SPC3_Set_Camera_Par(spc3, 100, 30000,300,1,Disabled,Disabled,Disabled);		
 		SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		exposure=100; // this is not used in Normal mode
+		uint16_t exposure=100; // this is not used in Normal mode
 		//SPC3_Set_Camera_Par(handle , exposure (10ns units), nframes for snap, nintegration , ncounters, Force 8bit, half array, signed (needs 3 counters));		
 		SPC3_Set_Camera_Par(spc3, exposure, 1,1,1,Enabled,Disabled,Disabled);		
 		SPC3_Set_Trigger_Out_State(spc3,Frame);
@@ -413,10 +411,10 @@ int main(int argc, char *argv[])
 
 			SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
 			//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-			exposure = 16; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+			uint16_t exposure = 16; // If we are in normal mode, exposure is not used, instead it is just the span of time 
 			uint64_t totalimages = atoi(argv[2]);
-			uint16_t getnimages = UINT8_MAX - 2; // giving one extra for size
-			//uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
+			//uint16_t getnimages = UINT8_MAX - 2; // giving one extra for size
+			uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
 			if (totalimages < getnimages){
 				getnimages = totalimages;
 			}
@@ -492,13 +490,90 @@ int main(int argc, char *argv[])
 					}
 				}
 			}
+			free(mybuff);
+			mybuff = NULL;
 		}
 		break;
-	case 'c': // NULL
+	case 'c': // dump sparse nimages
+		{
+			if (argc < 3) {
+				std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <minutes of acquisition> =======\n" << std::endl;
+				break;
+			} 
+			if (argc > 3) { 
+				std::cout << "background subtraction not yet implemented" << std::endl;
+				break;
+			}
+			BUFFER_H mybuff = NULL;
+			fname = (char*) calloc(256,sizeof(char));
+			sprintf(fname,"%s.batch%i.sparse",argv[1],0);
+			std::cout << "sparse images fname = " << fname << std::endl;
+			SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
+			//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
+			uint16_t exposure = 16; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+			uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
+			const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
+			if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
+				free(fname);
+			} else {
+				double wall0 = get_wall_time<double>();
+				double cpu0  = get_cpu_time<double>();
+				std::vector< std::vector< size_t > > ircv; // ids,rows,cols,vals
+				ircv.reserve(getnimages * 10 * 4 * sizeof(size_t));
+				SPC3_Set_Trigger_Out_State(spc3,Frame);
+				SPC3_Set_Live_Mode_OFF(spc3);
+				SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
+				SPC3_Apply_settings(spc3); 
+				double elapsed = (get_wall_time<double>() - wall0)/60.;
+				uint16_t batchnum(0);
+				std::ofstream output;
+				while (elapsed < unsigned(atoi(argv[2])) ){
+					sprintf(fname,"%s.batch%i.sparse",argv[1],0);
+					std::cout << "getting " << getnimages << " images for file " << fname << std::endl;
+					ircv.resize(0);
+					if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
+						free(fname);
+					} else {
+						SPC3_Prepare_Snap(spc3);
+						SPC3_Get_Snap(spc3);
+						if (SPC3_Get_Image_Buffer ( spc3, &mybuff ) != OK)
+						{
+							std::cout << "didn't get snap and get image buffer" << std::endl;
+							free(mybuff);
+						} else {
+							unsigned bytesPpix = unsigned(*(mybuff))/8; // checking the first bit to see if vector is 8 bits or 16.
+							if (bytesPpix > 1){ // only check on the first pass
+								getnimages /= 2;
+								getnimages -= 4;
+							}
+							//cv::Mat img(std::vector<int>())
+							for (size_t o=0; o < getnimages*2048; o++ ){
+								uint8_t v = *(mybuff+1+o*bytesPpix);
+								if (v>0){
+									uint16_t p = o%2048;
+									std::vector<size_t> vec = {o/2048,p/32,p%32,v};
+									ircv.push_back( vec );
+								}
+							}
+							sprintf(fname,"%s.batch%i.sparse",argv[1],batchnum);
+							output.open(fname,std::ios::out);
+							output << "#shotID\trow\tcol\tval\n";
+							output << ircv;
+							output.close();
+							batchnum++;
+							std::cout << "wrote " << fname << "\n"; 
+						}
+					}
+					elapsed = (get_wall_time<double>() - wall0)/60.;
+					std::cout << int(batchnum*getnimages) << " captures in elapsed time = " << elapsed << " minutes\n" << std::flush;
+				}
+				free(fname);
+			}
+		}
 		break;
 	case 'd': // row sum hist
 		{
-			if (argc < 3) {
+		if (argc < 3) {
 			std::cout << "failed argc\n======\tsyntax is " << argv[0] << " <filehead> <nbatches> <optional background img> =======\n" << std::endl;
 			break;
 		} 
@@ -519,7 +594,7 @@ int main(int argc, char *argv[])
 
 		SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
 		//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		exposure = 16; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+		uint16_t exposure = 16; // If we are in normal mode, exposure is not used, instead it is just the span of time 
 		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
 		const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
 		if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
@@ -527,14 +602,12 @@ int main(int argc, char *argv[])
 		} else {
 			double wall0 = get_wall_time<double>();
 			double cpu0  = get_cpu_time<double>();
-
 			std::vector<size_t> hist16((size_t) UINT16_MAX+1 , 0);
 			SPC3_Set_Trigger_Out_State(spc3,Frame);
 			SPC3_Set_Live_Mode_OFF(spc3);
 			SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
 			SPC3_Apply_settings(spc3); 
 			size_t nbatches = std::atoi(argv[2]);
-
 			uint16_t rowsum(0);
 			for (size_t b=0;b<nbatches;b++){
 				std::cout << "Working batch " << b << std::endl;
@@ -580,6 +653,8 @@ int main(int argc, char *argv[])
 			histstream << std::endl;
 			histstream.close();
 		}
+		free(fname);
+		fname = NULL;
 		}
 		break;
 
@@ -625,7 +700,7 @@ int main(int argc, char *argv[])
 		std::vector<uint64_t> SumImg(2048,0); // initializing to 0 eventhough log2(1) = 0 so we won't distinguish single counts and no counts.
 
 		SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-		exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+		uint16_t exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
 		uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
 		const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
 		if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
