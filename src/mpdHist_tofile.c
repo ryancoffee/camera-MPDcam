@@ -229,7 +229,7 @@ int main(int argc, char *argv[])
 			}		
 			//cv::namedWindow(ss.str());
 			//cv::imshow(ss.str(),outmat.t()); // mat.mul(256) so that it is visible when rendered via imshow, outmat is set to CV_8UC1 so it shouldn't need mul(256)
-			std::this_thread::sleep_for(std::chrono::milliseconds(500));
+			//std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		}
 		//Live mode off
 		SPC3_Set_Live_Mode_OFF(spc3);						
