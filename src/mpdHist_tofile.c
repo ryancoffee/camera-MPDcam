@@ -510,7 +510,7 @@ int main(int argc, char *argv[])
 			std::cout << "sparse images fname = " << fname << std::endl;
 			SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
 			//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-			uint16_t exposure = 16; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+			uint16_t exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
 			uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
 			const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
 			if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
@@ -529,7 +529,7 @@ int main(int argc, char *argv[])
 				std::ofstream output;
 				while (elapsed < unsigned(atoi(argv[2])) ){
 					sprintf(fname,"%s.batch%i.sparse.ascii",argv[1],batchnum);
-					std::cout << "getting " << getnimages << " images for file " << fname << std::endl;
+					//std::cout << "getting " << getnimages << " images for file " << fname << std::endl;
 					if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
 						free(fname);
 					} else {
@@ -540,7 +540,6 @@ int main(int argc, char *argv[])
 							std::cout << "didn't get snap and get image buffer" << std::endl;
 							free(mybuff);
 						} else {
-							ircv.resize(0);
 							unsigned bytesPpix = unsigned(*(mybuff))/8; // checking the first bit to see if vector is 8 bits or 16.
 							if (bytesPpix > 1){ // only check on the first pass
 								getnimages /= 2;
@@ -556,16 +555,19 @@ int main(int argc, char *argv[])
 								}
 							}
 							//sprintf(fname,"%s.batch%i.sparseascii",argv[1],batchnum);
-							output.open(fname,std::ios::out);
-							output << "#shotID\trow\tcol\tval\n";
-							output << ircv;
-							output.close();
+							if (batchnum%10==0){
+								output.open(fname,std::ios::out);
+								output << "#shotID\trow\tcol\tval\n";
+								output << ircv;
+								output.close();
+								std::cout << "wrote " << fname << "\n"; 
+								ircv.resize(0);
+								elapsed = (get_wall_time<double>() - wall0)/60.;
+								std::cout << int((batchnum+1)*getnimages) << " captures in elapsed time = " << elapsed << " minutes\n" << std::flush;
+							}
 							batchnum++;
-							std::cout << "wrote " << fname << "\n"; 
 						}
 					}
-					elapsed = (get_wall_time<double>() - wall0)/60.;
-					std::cout << int(batchnum*getnimages) << " captures in elapsed time = " << elapsed << " minutes\n" << std::flush;
 				}
 				free(fname);
 			}
