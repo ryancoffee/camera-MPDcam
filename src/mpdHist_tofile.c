@@ -528,9 +528,8 @@ int main(int argc, char *argv[])
 				uint16_t batchnum(0);
 				std::ofstream output;
 				while (elapsed < unsigned(atoi(argv[2])) ){
-					sprintf(fname,"%s.batch%i.sparse",argv[1],0);
+					sprintf(fname,"%s.batch%i.sparse.ascii",argv[1],batchnum);
 					std::cout << "getting " << getnimages << " images for file " << fname << std::endl;
-					ircv.resize(0);
 					if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
 						free(fname);
 					} else {
@@ -541,6 +540,7 @@ int main(int argc, char *argv[])
 							std::cout << "didn't get snap and get image buffer" << std::endl;
 							free(mybuff);
 						} else {
+							ircv.resize(0);
 							unsigned bytesPpix = unsigned(*(mybuff))/8; // checking the first bit to see if vector is 8 bits or 16.
 							if (bytesPpix > 1){ // only check on the first pass
 								getnimages /= 2;
@@ -555,7 +555,7 @@ int main(int argc, char *argv[])
 									ircv.push_back( vec );
 								}
 							}
-							sprintf(fname,"%s.batch%i.sparse",argv[1],batchnum);
+							//sprintf(fname,"%s.batch%i.sparseascii",argv[1],batchnum);
 							output.open(fname,std::ios::out);
 							output << "#shotID\trow\tcol\tval\n";
 							output << ircv;
