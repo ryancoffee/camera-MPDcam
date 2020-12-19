@@ -518,8 +518,6 @@ int main(int argc, char *argv[])
 			} else {
 				double wall0 = get_wall_time<double>();
 				double cpu0  = get_cpu_time<double>();
-				std::vector< std::vector< size_t > > ircv; // ids,rows,cols,vals
-				ircv.reserve(getnimages * 10 * 4 * sizeof(size_t));
 				SPC3_Set_Trigger_Out_State(spc3,Frame);
 				SPC3_Set_Live_Mode_OFF(spc3);
 				SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
@@ -540,6 +538,7 @@ int main(int argc, char *argv[])
 							std::cout << "didn't get snap and get image buffer" << std::endl;
 							free(mybuff);
 						} else {
+							std::vector< std::vector< size_t > > ircv; // ids,rows,cols,vals
 							unsigned bytesPpix = unsigned(*(mybuff))/8; // checking the first bit to see if vector is 8 bits or 16.
 							if (bytesPpix > 1){ // only check on the first pass
 								getnimages /= 2;
@@ -549,9 +548,16 @@ int main(int argc, char *argv[])
 							for (size_t o=0; o < getnimages*2048; o++ ){
 								uint8_t v = *(mybuff+1+o*bytesPpix);
 								if (v>0){
-									uint16_t p = o%2048;
-									std::vector<size_t> vec = {o/2048,p/32,p%32,v};
-									ircv.push_back( vec );
+									uint16_t p;
+									p = o%2048;
+									/*
+									std::vector<size_t> vec; 
+									vec[0] = o/2048;
+									vec[1] = p/32;
+									vec[2] = p%32;
+									vec[3] = v;
+									*/
+									ircv.push_back( {o/2048,p/32,p%32,v} );
 								}
 							}
 							//sprintf(fname,"%s.batch%i.sparseascii",argv[1],batchnum);
