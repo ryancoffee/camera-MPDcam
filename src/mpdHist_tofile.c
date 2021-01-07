@@ -511,8 +511,9 @@ int main(int argc, char *argv[])
 			SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
 			//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
 			uint16_t exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
-			uint16_t getnimages = UINT16_MAX - 2; // giving one extra for size
+			uint16_t getnimages = UINT16_MAX/2; // giving extra for safety size
 			const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
+			std::vector< std::vector< size_t > > ircv; // ids,rows,cols,vals
 			if ( SPC3_Set_Camera_Par(spc3, exposure, getnimages,nframeinteg,1,Enabled,Disabled,Disabled) != OK) {
 				free(fname);
 			} else {
@@ -538,7 +539,6 @@ int main(int argc, char *argv[])
 							std::cout << "didn't get snap and get image buffer" << std::endl;
 							free(mybuff);
 						} else {
-							std::vector< std::vector< size_t > > ircv; // ids,rows,cols,vals
 							unsigned bytesPpix = unsigned(*(mybuff))/8; // checking the first bit to see if vector is 8 bits or 16.
 							if (bytesPpix > 1){ // only check on the first pass
 								getnimages /= 2;
@@ -557,17 +557,20 @@ int main(int argc, char *argv[])
 									vec[2] = p%32;
 									vec[3] = v;
 									*/
-									ircv.push_back( {o/2048,p/32,p%32,v} );
+									ircv.push_back( std::vector<size_t>( {o/2048,p/32,p%32,v}) );
 								}
 							}
 							//sprintf(fname,"%s.batch%i.sparseascii",argv[1],batchnum);
 							if (batchnum%10==0){
 								output.open(fname,std::ios::out);
 								output << "#shotID\trow\tcol\tval\n";
-								output << ircv;
+								while (ircv.size()>0){
+									output << ircv.back();
+									ircv.pop_back();
+								}
+								//output << ircv;
 								output.close();
 								std::cout << "wrote " << fname << "\n"; 
-								ircv.resize(0);
 								elapsed = (get_wall_time<double>() - wall0)/60.;
 								std::cout << int((batchnum+1)*getnimages) << " captures in elapsed time = " << elapsed << " minutes\n" << std::flush;
 							}
