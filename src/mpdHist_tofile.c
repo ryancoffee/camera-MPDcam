@@ -510,7 +510,8 @@ int main(int argc, char *argv[])
 			std::cout << "sparse images fname = " << fname << std::endl;
 			SPC3_Constr(&spc3, Advanced,""); // set the mode to Advanced to get the eposure below 10.4 usec
 			//SPC3_Constr(&spc3, Normal,""); // set the mode to Advanced to get the eposure below 10.4 usec
-			uint16_t exposure = 1; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+			uint16_t exposure = 5; // If we are in normal mode, exposure is not used, instead it is just the span of time 
+					// choosing 5 clocks for exposure to match 50ns MIN_DEAD_TIME
 			uint16_t getnimages = UINT16_MAX/2; // giving extra for safety size
 			const uint16_t nframeinteg(1); // this seems to fail if I set this to 100
 			std::vector< std::vector< size_t > > ircv; // ids,rows,cols,vals
@@ -522,6 +523,11 @@ int main(int argc, char *argv[])
 				SPC3_Set_Trigger_Out_State(spc3,Frame);
 				SPC3_Set_Live_Mode_OFF(spc3);
 				SPC3_Set_Sync_In_State ( spc3, Disabled, 0);
+				SPC3_Set_DeadTime( spc3, MIN_DEAD_TIME); //uint16_t(100) ) //between MIN_DEAD_TIME and MAX_DEAD_TIME
+				SPC3_Set_DeadTime_Correction ( spc3, Disabled );
+				//
+				// Applying the settings //
+				//
 				SPC3_Apply_settings(spc3); 
 				double elapsed = (get_wall_time<double>() - wall0)/60.;
 				uint16_t batchnum(0);
