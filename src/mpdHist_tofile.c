@@ -563,14 +563,14 @@ int main(int argc, char *argv[])
 									vec[2] = p%32;
 									vec[3] = v;
 									*/
-									ircv.push_back( std::vector<size_t>( {o/2048,p/32,p%32,v}) );
+									ircv.push_back( std::vector<size_t>( {o/2048,p/32,p%32,v}) ); // Not sure, but I think o is image number, p/32 is row number, p%32 is col number, v is pix value
 								}
 							}
 							//sprintf(fname,"%s.batch%i.sparseascii",argv[1],batchnum);
 							if (batchnum%10==0){
 								output.open(fname,std::ios::out);
 								output << "#shotID\trow\tcol\tval\n";
-								while (ircv.size()>0){
+								while (ircv.size()>0){ // Sorry, I don't understand how I'm writing this file... we need to switch ot hdf5
 									output << ircv.back();
 									ircv.pop_back();
 								}
