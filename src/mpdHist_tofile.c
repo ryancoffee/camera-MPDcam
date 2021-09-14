@@ -570,15 +570,17 @@ int main(int argc, char *argv[])
 							if (batchnum%10==0){
 								output.open(fname,std::ios::out);
 								output << "#shotID\trow\tcol\tval\n";
-								while (ircv.size()>0){ // Sorry, I don't understand how I'm writing this file... we need to switch ot hdf5
+								while (ircv.size()>1){ // Sorry, I don't understand how I'm writing this file... we need to switch ot hdf5
 									output << ircv.back();
 									ircv.pop_back();
+									output << "\n";
 								}
 								//output << ircv;
 								output.close();
 								std::cout << "wrote " << fname << "\n"; 
 								elapsed = (get_wall_time<double>() - wall0)/60.;
 								std::cout << int((batchnum+1)*getnimages) << " captures in elapsed time = " << elapsed << " minutes\n" << std::flush;
+								ircv.resize(0);
 							}
 							batchnum++;
 						}
